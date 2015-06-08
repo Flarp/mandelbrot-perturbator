@@ -474,7 +474,8 @@ splitAdds = concatMap f
 
 codegen :: Integer -> String -> [(Int, Phase)] -> [(FilePath, String)]
 codegen order fname ps =
-  [(stem ++ ".c",
+
+  [ (stem ++ ".c",
   "#include <complex.h>\n\
   \#include <limits.h>\n\
   \#include <math.h>\n\
@@ -526,7 +527,6 @@ codegen order fname ps =
   \\n\
   \bool " ++ stem ++ "_series_step(struct " ++ stem ++ "_series *s, int exponent, int threshold) {\n\n" ++
   unlines (map genphase (init ps)) ++
-
   "  bool valid = true;\n\
   \  int e0;\n\
   \  int e1;\n\
@@ -547,27 +547,56 @@ codegen order fname ps =
   \  if (! valid) { return false; }\n\
   \\n\
   \  s->n += 1;\n\n" ++
-
   unlines [genphase (last ps)] ++
   "  return true;\n\
   \}\n\
   \\n\
-  \struct " ++ stem ++ "_approx {\n\
-  \  complex double v[" ++ show order ++ "];\n\
+  \struct " ++ fname ++ "_reference *" ++ stem ++ "_reference_new(const struct " ++ stem ++ "_series *s) {\n\
+  \  return " ++ fname ++ "_reference_new(s->v[0], s->v[1], s->v[2], s->v[3], s->n);\n\
+  \}\n\
+  \\n\
+  \#define FTYPE float\n\
+  \#define FNAME(x) x ## f\n\
+  \#define FMPFRGET mpfr_get_flt\n\
+  \#include \"" ++ stem ++ "_native.c\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \#undef FMPFRGET\n\
+  \\n\
+  \#define FTYPE double\n\
+  \#define FNAME(x) x\n\
+  \#define FMPFRGET mpfr_get_d\n\
+  \#include \"" ++ stem ++ "_native.c\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \#undef FMPFRGET\n\
+  \\n\
+  \#define FTYPE long double\n\
+  \#define FNAME(x) x ## l\n\
+  \#define FMPFRGET mpfr_get_ld\n\
+  \#include \"" ++ stem ++ "_native.c\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \#undef FMPFRGET\n\
+  \\n")
+
+  , (stem ++ "_native.c",
+  "struct FNAME(" ++ stem ++ "_approx) {\n\
+  \  complex FTYPE v[" ++ show order ++ "];\n\
   \  int exponent;\n\
   \};\n\
   \\n\
-  \struct " ++ stem ++ "_approx *"  ++ stem ++ "_approx_new(const struct " ++ stem ++ "_series *s, int exponent) {\n\
-  \  struct " ++ stem ++ "_approx *a = malloc(sizeof(*a));\n\
+  \struct FNAME(" ++ stem ++ "_approx) *FNAME("  ++ stem ++ "_approx_new)(const struct " ++ stem ++ "_series *s, int exponent) {\n\
+  \  struct FNAME(" ++ stem ++ "_approx) *a = malloc(sizeof(*a));\n\
   \  mpfr_t t;\n\
   \  mpfr_init2(t, mpfr_get_prec(s->v[0]));\n\
   \  for (int i = 0; i < " ++ show order ++ "; ++i) {\n\
   \    mpfr_set(t, s->v[2 * i + 4], MPFR_RNDN);\n\
   \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
-  \    double re = mpfr_get_d(t, MPFR_RNDN);\n\
+  \    FTYPE re = FMPFRGET(t, MPFR_RNDN);\n\
   \    mpfr_set(t, s->v[2 * i + 5], MPFR_RNDN);\n\
   \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
-  \    double im = mpfr_get_d(t, MPFR_RNDN);\n\
+  \    FTYPE im = FMPFRGET(t, MPFR_RNDN);\n\
   \    a->v[i] = re + I * im;\n\
   \  }\n\
   \  mpfr_clear(t);\n\
@@ -575,10 +604,10 @@ codegen order fname ps =
   \  return a;\n\
   \}\n\
   \\n\
-  \complex double " ++ stem ++ "_approx_do(const struct " ++ stem ++ "_approx *a, complex double dc) {\n\
-  \  complex double z = ldexp(creal(dc), a->exponent) + I * ldexp(cimag(dc), a->exponent);\n\
-  \  complex double zi = z;\n\
-  \  complex double s = 0;\n\
+  \complex FTYPE FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, complex FTYPE dc) {\n\
+  \  complex FTYPE z = FNAME(ldexp)(FNAME(creal)(dc), a->exponent) + I * FNAME(ldexp)(FNAME(cimag)(dc), a->exponent);\n\
+  \  complex FTYPE zi = z;\n\
+  \  complex FTYPE s = 0;\n\
   \  for (int i = 0; i < " ++ show order ++ "; ++i) {\n\
   \    s += a->v[i] * zi;\n\
   \    zi *= z;\n\
@@ -586,16 +615,14 @@ codegen order fname ps =
   \  return s;\n\
   \}\n\
   \\n\
-  \int " ++ stem ++ "_approx_get_exponent(const struct " ++ stem ++ "_approx *a) {\n\
+  \int FNAME(" ++ stem ++ "_approx_get_exponent)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  return a->exponent;\n\
   \}\n\
-  \const complex double *" ++ stem ++ "_approx_get_coefficients(const struct " ++ stem ++ "_approx *a) {\n\
+  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  return &a->v[0];\n\
   \}\n\
-  \\n\
-  \struct " ++ fname ++ "_reference *" ++ stem ++ "_reference_new(const struct " ++ stem ++ "_series *s) {\n\
-  \  return " ++ fname ++ "_reference_new(s->v[0], s->v[1], s->v[2], s->v[3], s->n);\n\
-  \}\n")
+  \")
+
   , (stem ++ ".h",
   "#ifndef " ++ stem ++ "_h\n\
   \#define " ++ stem ++ "_h 1\n\
@@ -610,15 +637,28 @@ codegen order fname ps =
   \void " ++ stem ++ "_series_delete(struct " ++ stem ++ "_series *s);\n\
   \int " ++ stem ++ "_series_get_n(const struct " ++ stem ++ "_series *s);\n\
   \bool " ++ stem ++ "_series_step(struct " ++ stem ++ "_series *s, int exponent, int threshold);\n\
-  \struct " ++ stem ++ "_approx;\n\
-  \struct " ++ stem ++ "_approx *"  ++ stem ++ "_approx_new(const struct " ++ stem ++ "_series *s, int exponent);\n\
-  \void " ++ stem ++ "_approx_delete(struct " ++ stem ++ "_approx *s);\n\
-  \int " ++ stem ++ "_approx_get_exponent(const struct " ++ stem ++ "_approx *a);\n\
-  \const complex double *" ++ stem ++ "_approx_get_coefficients(const struct " ++ stem ++ "_approx *a);\n\
-  \complex double " ++ stem ++ "_approx_do(const struct " ++ stem ++ "_approx *a, complex double dc);\n\
   \struct " ++ fname ++ "_reference *" ++ stem ++ "_reference_new(const struct " ++ stem ++ "_series *s);\n\
+  \struct " ++ stem ++ "_approxf;\n\
+  \struct " ++ stem ++ "_approx;\n\
+  \struct " ++ stem ++ "_approxl;\n\
+  \struct " ++ stem ++ "_approxf *"  ++ stem ++ "_approx_newf(const struct " ++ stem ++ "_series *s, int exponent);\n\
+  \struct " ++ stem ++ "_approx *"  ++ stem ++ "_approx_new(const struct " ++ stem ++ "_series *s, int exponent);\n\
+  \struct " ++ stem ++ "_approxl *"  ++ stem ++ "_approx_newl(const struct " ++ stem ++ "_series *s, int exponent);\n\
+  \void " ++ stem ++ "_approx_deletef(struct " ++ stem ++ "_approxf *s);\n\
+  \void " ++ stem ++ "_approx_delete(struct " ++ stem ++ "_approx *s);\n\
+  \void " ++ stem ++ "_approx_deletel(struct " ++ stem ++ "_approxl *s);\n\
+  \int " ++ stem ++ "_approx_get_exponentf(const struct " ++ stem ++ "_approxf *a);\n\
+  \int " ++ stem ++ "_approx_get_exponent(const struct " ++ stem ++ "_approx *a);\n\
+  \int " ++ stem ++ "_approx_get_exponentl(const struct " ++ stem ++ "_approxl *a);\n\
+  \const complex float *" ++ stem ++ "_approx_get_coefficientsf(const struct " ++ stem ++ "_approxf *a);\n\
+  \const complex double *" ++ stem ++ "_approx_get_coefficients(const struct " ++ stem ++ "_approx *a);\n\
+  \const complex long double *" ++ stem ++ "_approx_get_coefficientsl(const struct " ++ stem ++ "_approxl *a);\n\
+  \complex float " ++ stem ++ "_approx_dof(const struct " ++ stem ++ "_approxf *a, complex float dc);\n\
+  \complex double " ++ stem ++ "_approx_do(const struct " ++ stem ++ "_approx *a, complex double dc);\n\
+  \complex long double " ++ stem ++ "_approx_dol(const struct " ++ stem ++ "_approxl *a, complex long double dc);\n\
   \\n\
   \#endif\n")]
+
   where
     int
       | count <= 2^( 8 :: Int) = "uint8_t"
@@ -630,7 +670,6 @@ codegen order fname ps =
     values (_, Phase _ ras) = "{\n" ++ intercalate ",\n" (map value ras) ++ "\n}"
     value (Right res, args) = "{ " ++ show res ++ " , " ++ intercalate " , " (map show (rights args) ++ map show (lefts args)) ++ " }"
     count = 1 + maximum [ i | (_, Phase _ ras) <- ps, (res, args) <-ras, Right i <- res : args ]
-
     valids (_, Phase OpSet ras)
       = "{\n" ++ intercalate ",\n"
           [ "{ " ++ show re ++ " , " ++ show im ++ " }"
@@ -640,7 +679,6 @@ codegen order fname ps =
           , (Right sim, [ Right im ]) <- ras
           , sim == 2 * o + 5
           ] ++ "\n}\n"
-
     genphase (p, Phase op ras) =
       "  #pragma omp parallel for\n\
       \  for (int i = 0; i < " ++ show (length ras) ++ "; ++i) {\n" ++
@@ -741,12 +779,28 @@ codegenRef stem ps =
   \  free(r);\n\
   \}\n\
   \\n\
-  \complex double " ++ stem ++ "_reference_step(struct " ++ stem ++ "_reference *r) {\n\
-  \  complex double z = mpfr_get_d(r->v[2], MPFR_RNDN) + I * mpfr_get_d(r->v[3], MPFR_RNDN);\n\n" ++
+  \void " ++ stem ++ "_reference_step(struct " ++ stem ++ "_reference *r) {\n\n" ++
   unlines (map genphase ps) ++
   "  r->n += 1;\n\
-  \  return z;\n\
-  \}\n")
+  \}\n\
+  \\n\
+  \int " ++ stem ++ "_reference_get_n(const struct " ++ stem ++ "_reference *r) {\n\
+  \  return r->n;\n\
+  \}\n\
+  \\n\
+  \complex float " ++ stem ++ "_reference_get_zf(const struct " ++ stem ++ "_reference *r) {\n\
+  \  return mpfr_get_flt(r->v[2], MPFR_RNDN) + I * mpfr_get_flt(r->v[3], MPFR_RNDN);\n\
+  \}\n\
+  \\n\
+  \complex double " ++ stem ++ "_reference_get_z(const struct " ++ stem ++ "_reference *r) {\n\
+  \  return mpfr_get_d(r->v[2], MPFR_RNDN) + I * mpfr_get_d(r->v[3], MPFR_RNDN);\n\
+  \}\n\
+  \\n\
+  \complex long double " ++ stem ++ "_reference_get_zl(const struct " ++ stem ++ "_reference *r) {\n\
+  \  return mpfr_get_ld(r->v[2], MPFR_RNDN) + I * mpfr_get_ld(r->v[3], MPFR_RNDN);\n\
+  \}\n\
+  \\n")
+
   , (stem ++ "_ref.h",
   "#ifndef " ++ stem ++ "_ref_h\n\
   \#define " ++ stem ++ "_ref_h 1\n\
@@ -757,9 +811,14 @@ codegenRef stem ps =
   \struct " ++ stem ++ "_reference;\n\
   \struct " ++ stem ++ "_reference *" ++ stem ++ "_reference_new(const mpfr_t cx, const mpfr_t cy, const mpfr_t zx, const mpfr_t zy, int n);\n\
   \void " ++ stem ++ "_reference_delete(struct " ++ stem ++ "_reference *r);\n\
-  \complex double " ++ stem ++ "_reference_step(struct " ++ stem ++ "_reference *r);\n\
+  \void " ++ stem ++ "_reference_step(struct " ++ stem ++ "_reference *r);\n\
+  \int " ++ stem ++ "_reference_get_n(const struct " ++ stem ++ "_reference *r);\n\
+  \complex float " ++ stem ++ "_reference_get_zf(const struct " ++ stem ++ "_reference *r);\n\
+  \complex double " ++ stem ++ "_reference_get_z(const struct " ++ stem ++ "_reference *r);\n\
+  \complex long double " ++ stem ++ "_reference_get_zl(const struct " ++ stem ++ "_reference *r);\n\
   \\n\
   \#endif\n")]
+
   where
     int
       | count <= 2^( 8 :: Int) = "uint8_t"
