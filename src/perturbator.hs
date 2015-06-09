@@ -713,7 +713,7 @@ codegen order fname ps =
                 \    );\n"
 
 main' :: String -> [Integer] -> E -> [(FilePath, String)]
-main' stem orders f = main''' stem f ++ concat [main'' stem order f | order <- orders ]
+main' stem orders f = main''' stem f ++ concat [main'' stem order f | order <- orders ] ++ codegenWrap stem orders
 
 main''' :: String -> E -> [(FilePath, String)]
 main''' stem f = codegenRef stem ref
@@ -732,6 +732,208 @@ main''' stem f = codegenRef stem ref
           , (ZIm, fim)
           ]
         Pair (fre, fim) = cnormalize $ f
+
+codegenWrap :: String -> [Integer] -> [(FilePath, String)]
+codegenWrap stem orders =
+  [ ( stem ++ ".h",
+  "#ifndef " ++ stem ++ "_h\n\
+  \#define " ++ stem ++ "_h 1\n\
+  \\n\
+  \#include <complex.h>\n\
+  \#include <stdbool.h>\n\
+  \\n\
+  \#include " ++ show (stem ++ "_ref.h") ++ "\n\
+  \struct " ++ stem ++ "_series;\n\
+  \struct " ++ stem ++ "_series *" ++ stem ++ "_series_new(const int order, const mpfr_t cx, const mpfr_t cy);\n\
+  \void " ++ stem ++ "_series_delete(struct " ++ stem ++ "_series *s);\n\
+  \bool " ++ stem ++ "_series_step(struct " ++ stem ++ "_series *s, const int exponent, const int threshold);\n\
+  \int " ++ stem ++ "_series_get_n(const struct " ++ stem ++ "_series *s);\n\
+  \struct " ++ stem ++ "_reference *" ++ stem ++ "_series_reference_new(const struct " ++ stem ++ "_series *s);\n\
+  \\n\
+  \#define FTYPE float\n\
+  \#define FNAME(x) x ## f\n\
+  \#include \"" ++ stem ++ "_approx_native.h\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \\n\
+  \#define FTYPE double\n\
+  \#define FNAME(x) x\n\
+  \#include \"" ++ stem ++ "_approx_native.h\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \\n\
+  \#define FTYPE long double\n\
+  \#define FNAME(x) x ## l\n\
+  \#include \"" ++ stem ++ "_approx_native.h\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \\n\
+  \#endif\n\
+  \\n")
+
+  , ( stem ++ "_approx_native.h",
+  "struct FNAME(" ++ stem ++ "_approx);\n\
+  \struct FNAME(" ++ stem ++ "_approx) *FNAME(" ++ stem ++ "_series_approx_new)(const struct " ++ stem ++ "_series *s, const int exponent);\n\
+  \void FNAME(" ++ stem ++ "_approx_delete)(struct FNAME(" ++ stem ++ "_approx) *a);\n\
+  \int FNAME(" ++ stem ++ "_approx_get_order)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
+  \int FNAME(" ++ stem ++ "_approx_get_exponent)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
+  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
+  \complex FTYPE FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const complex FTYPE dc);\n\
+  \\n")
+
+  , ( stem ++ ".c",
+  "#include <stdlib.h>\n\
+  \\n\
+  \#include \"" ++ stem ++ ".h\"\n\
+  \\n" ++
+  unlines [ "#include " ++ show (stem ++ "_" ++ show order ++ ".h") | order <- orders ] ++
+  "\n\
+  \struct " ++ stem ++ "_series {\n\
+  \  int order;\n\
+  \  void *series;\n\
+  \};\n\
+  \\n\
+  \struct " ++ stem ++ "_series *" ++ stem ++ "_series_new(const int order, const mpfr_t cx, const mpfr_t cy) {\n\
+  \   struct " ++ stem ++ "_series *s = calloc(1, sizeof(*s));\n\
+  \  if (! s) { return 0; }\n\
+  \  s->order = order;\n\
+  \  switch (order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": s->series = " ++ stem ++ "_" ++ show order ++ "_series_new(cx, cy); break;" | order <- orders ] ++
+  "  }\n\
+  \  if (! s->series) {\n\
+  \    free(s);\n\
+  \    return 0;\n\
+  \  }\n\
+  \  return s;\n\
+  \}\n\
+  \\n\
+  \void " ++ stem ++ "_series_delete(struct " ++ stem ++ "_series *s) {\n\
+  \  if (! s) {\n\
+  \    return;\n\
+  \  }\n\
+  \  switch (s->order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": " ++ stem ++ "_" ++ show order ++ "_series_delete(s->series); break;" | order <- orders ] ++
+  "  }\n\
+  \  free(s);\n\
+  \}\n\
+  \\n\
+  \bool " ++ stem ++ "_series_step(struct " ++ stem ++ "_series *s, const int exponent, const int threshold) {\n\
+  \  if (! s) {\n\
+  \    return false;\n\
+  \  }\n\
+  \  switch (s->order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_series_step(s->series, exponent, threshold);" | order <- orders ] ++
+  "  }\n\
+  \  return false;\n\
+  \}\n\
+  \\n\
+  \int " ++ stem ++ "_series_get_n(const struct " ++ stem ++ "_series *s) {\n\
+  \  if (! s) {\n\
+  \    return 0;\n\
+  \  }\n\
+  \  switch (s->order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_series_get_n(s->series);" | order <- orders ] ++
+  "  }\n\
+  \  return 0;\n\
+  \}\n\
+  \\n\
+  \struct " ++ stem ++ "_reference *" ++ stem ++ "_series_reference_new(const struct " ++ stem ++ "_series *s) {\n\
+  \  if (! s) {\n\
+  \    return 0;\n\
+  \  }\n\
+  \  switch (s->order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_reference_new(s->series);" | order <- orders ] ++
+  " }\n\
+  \  return 0;\n\
+  \}\n\
+  \\n\
+  \#define FTYPE float\n\
+  \#define FNAME(x) x ## f\n\
+  \#include \"" ++ stem ++ "_approx_native.c\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \\n\
+  \#define FTYPE double\n\
+  \#define FNAME(x) x\n\
+  \#include \"" ++ stem ++ "_approx_native.c\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \\n\
+  \#define FTYPE long double\n\
+  \#define FNAME(x) x ## l\n\
+  \#include \"" ++ stem ++ "_approx_native.c\"\n\
+  \#undef FTYPE\n\
+  \#undef FNAME\n\
+  \\n")
+
+  , ( stem ++ "_approx_native.c",
+  "struct FNAME(" ++ stem ++ "_approx) {\n\
+  \  int order;\n\
+  \  void *approx;\n\
+  \};\n\
+  \\n\
+  \struct FNAME(" ++ stem ++ "_approx) *FNAME(" ++ stem ++ "_series_approx_new)(const struct " ++ stem ++ "_series *s, const int exponent) {\n\
+  \  if (! s) {\n\
+  \    return 0;\n\
+  \  }\n\
+  \  struct FNAME(" ++ stem ++ "_approx) *a = calloc(1, sizeof(*a));\n\
+  \  a->order = s->order;\n\
+  \  switch (s->order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": a->approx = FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_new)(s->series, exponent); break;" | order <- orders ] ++
+  "  }\n\
+  \  if (! a->approx) {\n\
+  \    free(a);\n\
+  \    return 0;\n\
+  \  }\n\
+  \  return a;\n\
+  \}\n\
+  \\n\
+  \void FNAME(" ++ stem ++ "_approx_delete)(struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \  if (! a) {\n\
+  \    return;\n\
+  \  }\n\
+  \  free(a->approx);  // FIXME check this\n\
+  \  free(a);\n\
+  \}\n\
+  \\n\
+  \int FNAME(" ++ stem ++ "_approx_get_order)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \  if (! a) {\n\
+  \    return 0;\n\
+  \  }\n\
+  \  return a->order;\n\
+  \}\n\
+  \\n\
+  \int FNAME(" ++ stem ++ "_approx_get_exponent)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \  if (! a) {\n\
+  \    return 0;\n\
+  \  }\n\
+  \  switch (a->order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_exponent)(a->approx);" | order <- orders ] ++
+  "  }\n\
+  \  return 0;\n\
+  \}\n\
+  \\n\
+  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \  if (! a) {\n\
+  \    return 0;\n\
+  \  }\n\
+  \  switch (a->order) {" ++
+  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_coefficients)(a->approx);" | order <- orders ] ++
+  "  }\n\
+  \  return 0;\n\
+  \}\n\
+  \\n\
+  \complex FTYPE FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const complex FTYPE dc) {\n\
+  \  if (! a) {\n\
+  \    return 0;\n\
+  \  }\n\
+  \  switch (a->order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_do)(a->approx, dc);" | order <- orders ] ++
+  "  }\n\
+  \  return 0;\n\
+  \}\n\
+  \\n")
+  ]
 
 codegenRef :: String -> [(Int, Phase)] -> [(FilePath, String)]
 codegenRef stem ps =
@@ -799,6 +1001,13 @@ codegenRef stem ps =
   \complex long double " ++ stem ++ "_reference_get_zl(const struct " ++ stem ++ "_reference *r) {\n\
   \  return mpfr_get_ld(r->v[2], MPFR_RNDN) + I * mpfr_get_ld(r->v[3], MPFR_RNDN);\n\
   \}\n\
+  \\n\
+  \void " ++ stem ++ "_reference_get_zr(const struct " ++ stem ++ "_reference *ref, mpfr_t zx, mpfr_t zy) {\n\
+  \  mpfr_set_prec(zx, mpfr_get_prec(ref->v[2]));\n\
+  \  mpfr_set_prec(zy, mpfr_get_prec(ref->v[3]));\n\
+  \  mpfr_set(zx, ref->v[2], MPFR_RNDN);\n\
+  \  mpfr_set(zy, ref->v[3], MPFR_RNDN);\n\
+  \}\n\
   \\n")
 
   , (stem ++ "_ref.h",
@@ -816,6 +1025,7 @@ codegenRef stem ps =
   \complex float " ++ stem ++ "_reference_get_zf(const struct " ++ stem ++ "_reference *r);\n\
   \complex double " ++ stem ++ "_reference_get_z(const struct " ++ stem ++ "_reference *r);\n\
   \complex long double " ++ stem ++ "_reference_get_zl(const struct " ++ stem ++ "_reference *r);\n\
+  \void " ++ stem ++ "_reference_get_zr(const struct " ++ stem ++ "_reference *ref, mpfr_t zx, mpfr_t zy);\n\
   \\n\
   \#endif\n")]
 
