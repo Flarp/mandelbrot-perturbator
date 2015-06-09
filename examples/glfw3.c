@@ -1,3 +1,7 @@
+// perturbator -- efficient deep zooming for Mandelbrot sets
+// Copyright (C) 2015 Claude Heiland-Allen
+// License GPL3+ http://www.gnu.org/licenses/gpl.html
+
 #define _POSIX_C_SOURCE 199309L
 
 #include <math.h>

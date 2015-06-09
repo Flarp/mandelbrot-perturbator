@@ -1,5 +1,5 @@
--- mightymandel -- GPU-based Mandelbrot Set explorer
--- Copyright (C) 2012,2013,2014,2015 Claude Heiland-Allen
+-- perturbator -- efficient deep zooming for Mandelbrot sets
+-- Copyright (C) 2015 Claude Heiland-Allen
 -- License GPL3+ http://www.gnu.org/licenses/gpl.html
 
 {-# LANGUAGE FlexibleInstances #-}
