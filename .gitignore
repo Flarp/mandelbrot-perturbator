@@ -1,0 +1,6 @@
+examples/perturbator-glfw3
+src/perturbator
+src/generated
+*.a
+*.o
+*.hi
