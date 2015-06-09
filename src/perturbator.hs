@@ -713,7 +713,7 @@ codegen order fname ps =
                 \    );\n"
 
 main' :: String -> [Integer] -> E -> [(FilePath, String)]
-main' stem orders f = main''' stem f ++ concat [main'' stem order f | order <- orders ] ++ codegenWrap stem orders
+main' stem orders f = main''' stem f ++ concat [main'' stem order f | order <- orders ] ++ codegenWrap stem orders ++ codegenMake stem orders
 
 main''' :: String -> E -> [(FilePath, String)]
 main''' stem f = codegenRef stem ref
@@ -732,6 +732,21 @@ main''' stem f = codegenRef stem ref
           , (ZIm, fim)
           ]
         Pair (fre, fim) = cnormalize $ f
+
+codegenMake :: String -> [Integer] -> [(FilePath, String)]
+codegenMake stem orders =
+  [ ( "Makefile",
+  "OBJECTS = \\\n" ++
+  unlines [ "\t" ++ stem ++ "_" ++ show order ++ ".o \\" | order <- orders ] ++
+  "\t" ++ stem ++ "_ref.o \\\n\t" ++ stem ++ ".o\n\
+  \\n\
+  \all: $(OBJECTS)\n\
+  \.SUFFIXES:\n\
+  \.PHONY: all\n\
+  \%.o: %.c\n\
+  \\tgcc -std=c99 -pedantic -Wall -Wextra -fopenmp -O3 -march=native -c $<\n\
+  \\n")
+  ]
 
 codegenWrap :: String -> [Integer] -> [(FilePath, String)]
 codegenWrap stem orders =
