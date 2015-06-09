@@ -2,7 +2,7 @@
 // Copyright (C) 2015 Claude Heiland-Allen
 // License GPL3+ http://www.gnu.org/licenses/gpl.html
 
-static inline double FNAME(cnorm)(complex FTYPE z) {
+static inline FTYPE FNAME(cnorm)(complex FTYPE z) {
   return FNAME(creal)(z) * FNAME(creal)(z) + FNAME(cimag)(z) * FNAME(cimag)(z);
 }
 
@@ -263,7 +263,7 @@ static void *FNAME(image_worker)(void *arg) {
           }
         }
       }
-      if (! ok) {
+      if (0 && ! ok) {
         // try modified partials
         image_log(img, LOG_CACHE, "         SEARCH\n");
         mpc_t z, dc0;
@@ -317,6 +317,7 @@ static void *FNAME(image_worker)(void *arg) {
       }
 
       if (ok) {
+        mpc_set_prec(img->last_reference, img->precision);
         mpc_set(img->last_reference, nucleus, MPC_RNDNN);
       }
       mpc_set(ref->c, nucleus, MPC_RNDNN);

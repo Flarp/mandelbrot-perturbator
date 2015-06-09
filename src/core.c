@@ -21,6 +21,10 @@
 #include "m_r_shape.c"
 #include "m_r_box_period.c"
 
+static inline int max(int a, int b) {
+  return a > b ? a : b;
+}
+
 enum float_type
   { ft_float
   , ft_double
@@ -181,7 +185,7 @@ static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_
 #undef FMPCADD
 #undef FT
 
-extern struct perturbator *perturbator_new(int workers, int width, int height, int maxiters, int chunk, double escape_radius, double glitch_threshold, int precision) {
+extern struct perturbator *perturbator_new(int workers, int width, int height, int maxiters, int chunk, double escape_radius, double glitch_threshold) {
   struct perturbator *img = calloc(1, sizeof(*img));
 
   img->workers = workers;
@@ -191,9 +195,9 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
   img->chunk = chunk;
   img->escape_radius = escape_radius;
   img->glitch_threshold = glitch_threshold;
-  img->precision = precision;
+  img->precision = 53;
   
-  mpc_init2(img->center, precision);
+  mpc_init2(img->center, 53);
   mpfr_init2(img->radius, 53);
 
   img->escape_radius_2 = escape_radius * escape_radius;
@@ -204,9 +208,9 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
 
   img->order = 24;
   img->threshold = 64;
-  img->logging = LOG_VIEW;
+  img->logging = -1;
 
-  mpc_init2(img->last_reference, precision);
+  mpc_init2(img->last_reference, 53);
   mpc_set_ui_ui(img->last_reference, 0, 0, MPC_RNDNN);
 
   img->output = calloc(1, width * height * 4 * sizeof(*img->output));
@@ -222,14 +226,17 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
 
 extern void perturbator_start(struct perturbator *img, const mpfr_t centerx, const mpfr_t centery, const mpfr_t radius) {
 
-  image_log(img, LOG_VIEW, "real=%Re\nimag=%Re\nradius=%Re\n", centerx, centery, radius);
+  img->precision = max(53, 53 - 2 * mpfr_get_exp(radius));
 
+  image_log(img, LOG_VIEW, "real=%Re\nimag=%Re\nradius=%Re\nprecision=%d\n", centerx, centery, radius, img->precision);
+
+  mpc_set_prec(img->center, img->precision);
   mpc_set_fr_fr(img->center, centerx, centery, MPC_RNDNN);
   mpfr_set(img->radius, radius, MPFR_RNDN);
 
   memset(img->output, 0, img->width * img->height * 4 * sizeof(*img->output));
 
-  img->ft = ft_double;
+  img->ft = mpfr_get_exp(radius) >= EXP_THRESHOLD_DOUBLE ? ft_double : ft_long_double;
   switch (img->ft) {
     case ft_float:        perturbator_start_internalf(img); return;
     case ft_double:       perturbator_start_internal (img); return;
@@ -305,7 +312,7 @@ static struct series_node *image_cached_approx(struct perturbator *img, bool reu
         node->next = img->nodes;
         node->exponent = e;
         node->iters = iters;
-        mpc_init2(node->z, img->precision);
+        mpc_init2(node->z, 53); // updated by get_z
         struct z2c_reference *reference = z2c_series_reference_new(img->series);
         z2c_reference_get_zr(reference, mpc_realref(node->z), mpc_imagref(node->z));
         z2c_reference_delete(reference);

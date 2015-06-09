@@ -19,6 +19,10 @@
 
 #include "perturbator.h"
 
+static inline int max(int a, int b) {
+  return a > b ? a : b;
+}
+
 static int envi(const char *name, int def) {
   const char *e = getenv(name);
   if (e) {
@@ -123,36 +127,53 @@ static void button_handler(GLFWwindow *window, int button, int action, int mods)
     mpfr_set(r, state->radius, MPFR_RNDN);
     double w = state->width;
     double h = state->height;
-    double d = 2 * mpfr_get_d(r, MPFR_RNDN);
-    double dx = d * ((x + 0.5) / w - 0.5) * (w / h);
-    double dy = d * (0.5 - (y + 0.5) / h);
+    double dx = 2 * ((x + 0.5) / w - 0.5) * (w / h);
+    double dy = 2 * (0.5 - (y + 0.5) / h);
+    mpfr_t ddx, ddy;
+    mpfr_init2(ddx, 53);
+    mpfr_init2(ddy, 53);
+    mpfr_mul_d(ddx, r, dx, MPFR_RNDN);
+    mpfr_mul_d(ddy, r, dy, MPFR_RNDN);
     switch (button) {
       case GLFW_MOUSE_BUTTON_LEFT:
-        mpfr_add_d(cx, cx, dx / 2, MPFR_RNDN);
-        mpfr_add_d(cy, cy, dy / 2, MPFR_RNDN);
+        mpfr_mul_2si(ddx, ddx, -1, MPFR_RNDN);
+        mpfr_mul_2si(ddy, ddy, -1, MPFR_RNDN);
+        mpfr_add(cx, cx, ddx, MPFR_RNDN);
+        mpfr_add(cy, cy, ddy, MPFR_RNDN);
         mpfr_mul_2si(r, r, -1, MPFR_RNDN);
+        state->precision += 1;
+        mpfr_set_prec(state->centerx, state->precision);
+        mpfr_set_prec(state->centery, state->precision);
         mpfr_set(state->centerx, cx, MPFR_RNDN);
         mpfr_set(state->centery, cy, MPFR_RNDN);
         mpfr_set(state->radius, r, MPFR_RNDN);
         state->should_restart = true;
         break;
       case GLFW_MOUSE_BUTTON_RIGHT:
-        mpfr_sub_d(cx, cx, dx, MPFR_RNDN);
-        mpfr_sub_d(cy, cy, dy, MPFR_RNDN);
+        mpfr_sub(cx, cx, ddx, MPFR_RNDN);
+        mpfr_sub(cy, cy, ddy, MPFR_RNDN);
         mpfr_mul_2si(r, r, 1, MPFR_RNDN);
+        state->precision -= 1;
+        mpfr_set_prec(state->centerx, state->precision);
+        mpfr_set_prec(state->centery, state->precision);
         mpfr_set(state->centerx, cx, MPFR_RNDN);
         mpfr_set(state->centery, cy, MPFR_RNDN);
         mpfr_set(state->radius, r, MPFR_RNDN);
         state->should_restart = true;
         break;
       case GLFW_MOUSE_BUTTON_MIDDLE:
-        mpfr_add_d(cx, cx, dx, MPFR_RNDN);
-        mpfr_add_d(cy, cy, dy, MPFR_RNDN);
+        mpfr_add(cx, cx, ddx, MPFR_RNDN);
+        mpfr_add(cy, cy, ddy, MPFR_RNDN);
         mpfr_set(state->centerx, cx, MPFR_RNDN);
         mpfr_set(state->centery, cy, MPFR_RNDN);
         state->should_restart = true;
         break;
     }
+    mpfr_clear(cx);
+    mpfr_clear(cy);
+    mpfr_clear(r);
+    mpfr_clear(ddx);
+    mpfr_clear(ddy);
   }
 (void) mods;
 }
@@ -194,12 +215,12 @@ extern int main(int argc, char **argv) {
   int chunk = envi("chunk", 1 << 8);
   double escape_radius = envd("escaperadius", 25);
   double glitch_threshold = envd("glitchthreshold", 1e-6);
-  int precision = envi("precision", 1 << 10);
+  int precision = envi("precision", 53);
 
   mpfr_init2(state.radius, 53);
   envr(state.radius, "radius", "2.0");
 
-  int e = 2 * (log2(height) - mpfr_get_exp(state.radius));
+  int e = max(53, 53 - mpfr_get_exp(state.radius));
   if (e > precision) {
     fprintf(stderr, "WARNING: increasing precision to %d\n", e);
     precision = e;
@@ -275,7 +296,7 @@ extern int main(int argc, char **argv) {
   state.height = height;
   state.precision = precision;
 
-  struct perturbator *context = perturbator_new(workers, width, height, maxiters, chunk, escape_radius, glitch_threshold, precision);
+  struct perturbator *context = perturbator_new(workers, width, height, maxiters, chunk, escape_radius, glitch_threshold);
 
   glfwSetWindowUserPointer(window, &state);
   glfwSetMouseButtonCallback(window, button_handler);
