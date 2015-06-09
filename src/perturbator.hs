@@ -24,9 +24,6 @@ sortOn f = sortBy (compare `on` f)
 groupOn :: Eq e => (a -> e) -> [a] -> [[a]]
 groupOn f = groupBy ((==) `on` f)
 
-class Pretty e where
-  pretty :: e -> String
-
 class Simplify e where
   simplify :: e -> e
 
@@ -38,16 +35,6 @@ normalize = simplify . collect . simplify
 
 data E = Sum [E] | Product [E] | N Integer | A Integer | Z | C | DZ | DC
   deriving (Read, Show, Eq, Ord)
-
-instance Pretty E where
-  pretty DC = "\\D{c}}"
-  pretty DZ = "\\D{z}}"
-  pretty C = "c"
-  pretty Z = "z"
-  pretty (A a) = "A_{" ++ show a ++ "}"
-  pretty (N n) = "{" ++ show n ++ "}"
-  pretty (Product es) = unwords (map pretty es)
-  pretty (Sum es) = intercalate (" + ") (map pretty es)
 
 instance Num E where
   fromInteger = N
