@@ -2,10 +2,8 @@ todo
 ====
 
 phase 1
-* generalize number types in core.c to core_native.c
 * choose appropriate number type for pixel spacing
 * choose precision of reference by pixel spacing
-* approx cache uses mixed number types
 * switch to new reference if all pixels are glitched
 
 phase 2
