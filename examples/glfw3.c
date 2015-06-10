@@ -63,6 +63,7 @@ static const char *simple_vert =
 static const char *simple_frag =
   "#version 150 core\n"
   "uniform sampler2D tex;\n"
+  "uniform bool show_lines;\n"
   "in vec2 texCoord;\n"
   "out vec4 colour;\n"
   "int px(vec2 tc) {\n"
@@ -80,9 +81,12 @@ static const char *simple_frag =
   "  return sqr(l.x + l.y);\n"
   "}\n"
   "void main() {\n"
+  "  float e = 1.0;\n"
   "  vec2 dx = dFdx(texCoord);\n"
   "  vec2 dy = dFdy(texCoord);\n"
-  "  float e = px(texCoord) == px(texCoord + dx + dy) && px(texCoord + dx) == px(texCoord + dy) ? 1.0 : 0.0;\n"
+  "  if (show_lines) {\n"
+  "    e = px(texCoord) == px(texCoord + dx + dy) && px(texCoord + dx) == px(texCoord + dy) ? 1.0 : 0.0;\n"
+  "  }\n"
   "  vec2 me = texture(tex, texCoord).xy;\n"
   "  vec2 l1 = texture(tex, texCoord - dx).xy - me;\n"
   "  vec2 l2 = texture(tex, texCoord + dx).xy - me;\n"
@@ -101,6 +105,9 @@ struct state_s {
   bool should_redraw;
   bool should_save_now;
   bool should_save_when_done;
+
+  bool show_lines;
+  GLuint show_lines_u;
 
   int width;
   int height;
@@ -186,6 +193,10 @@ static void key_handler(GLFWwindow *window, int key, int scancode, int action, i
       case GLFW_KEY_ESCAPE:
         glfwSetWindowShouldClose(window, GL_TRUE);
         break;
+      case GLFW_KEY_L:
+        state->show_lines = ! state->show_lines;
+        state->should_redraw = true;
+        break;
       case GLFW_KEY_S:
         if (mods & GLFW_MOD_SHIFT) {
           state->should_save_now = true;
@@ -201,6 +212,7 @@ static void key_handler(GLFWwindow *window, int key, int scancode, int action, i
 static void refresh_callback(void *user_pointer) {
   state_t *state = user_pointer;
   assert(state);
+  glUniform1i(state->show_lines_u, state->show_lines);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glfwSwapBuffers(state->window);
 }
@@ -281,6 +293,7 @@ extern int main(int argc, char **argv) {
     }
   }
   glUseProgram(program);
+  state.show_lines_u = glGetUniformLocation(program, "show_lines");
 
   uint8_t *ppm = malloc(width * height * 3);
   assert(ppm);
