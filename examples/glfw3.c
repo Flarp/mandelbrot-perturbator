@@ -106,6 +106,7 @@ struct state_s {
   bool should_redraw;
   bool should_save_now;
   bool should_save_when_done;
+  bool should_view_embedded_julia;
 
   bool show_lines;
   GLuint show_lines_u;
@@ -196,6 +197,9 @@ static void key_handler(GLFWwindow *window, int key, int scancode, int action, i
       case GLFW_KEY_ESCAPE:
         glfwSetWindowShouldClose(window, GL_TRUE);
         break;
+      case GLFW_KEY_J:
+        state->should_view_embedded_julia = true;
+        break;
       case GLFW_KEY_L:
         state->show_lines = ! state->show_lines;
         state->should_redraw = true;
@@ -227,6 +231,30 @@ static void refresh_callback(void *user_pointer) {
   glUniform1f(state->weight_u, exp2f(state->log2weight));
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glfwSwapBuffers(state->window);
+}
+
+static void handle_view_embedded_julia(struct perturbator *context, state_t *state) {
+  if (state->should_view_embedded_julia) {
+    state->should_view_embedded_julia = false;
+    mpfr_t x, y, r;
+    mpfr_init2(x, 53);
+    mpfr_init2(y, 53);
+    mpfr_init2(r, 53);
+    int ok = perturbator_view_embedded_julia_set(context, x, y, r);
+    if (ok && mpfr_less_p(r, state->radius)) {
+      int p = max(53, 53 - mpfr_get_exp(r));
+      state->precision = p;
+      mpfr_set_prec(state->centerx, p);
+      mpfr_set_prec(state->centery, p);
+      mpfr_set(state->centerx, x, MPFR_RNDN);
+      mpfr_set(state->centery, y, MPFR_RNDN);
+      mpfr_set(state->radius, r, MPFR_RNDN);
+      state->should_restart = true;
+    }
+    mpfr_clear(x);
+    mpfr_clear(y);
+    mpfr_clear(r);
+  }
 }
 
 extern int main(int argc, char **argv) {
@@ -358,6 +386,8 @@ extern int main(int argc, char **argv) {
         fflush(stdout);
       }
 
+      handle_view_embedded_julia(context, &state);
+
       if (state.should_restart) {
         state.should_restart = false;
 //        fprintf(stderr, "start\n");
@@ -395,6 +425,8 @@ extern int main(int argc, char **argv) {
 //        fprintf(stderr, "refresh\n");
         refresh_callback(&state);
 //      }
+
+      handle_view_embedded_julia(context, &state);
 
     }
 
