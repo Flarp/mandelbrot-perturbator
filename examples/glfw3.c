@@ -64,6 +64,7 @@ static const char *simple_frag =
   "#version 150 core\n"
   "uniform sampler2D tex;\n"
   "uniform bool show_lines;\n"
+  "uniform float weight;\n"
   "in vec2 texCoord;\n"
   "out vec4 colour;\n"
   "int px(vec2 tc) {\n"
@@ -92,9 +93,9 @@ static const char *simple_frag =
   "  vec2 l2 = texture(tex, texCoord + dx).xy - me;\n"
   "  vec2 l3 = texture(tex, texCoord - dy).xy - me;\n"
   "  vec2 l4 = texture(tex, texCoord + dy).xy - me;\n"
-  "  float s = 4.0 + sqr(l1) + sqr(l2) + sqr(l3) + sqr(l4);\n"
-  "  s = sqrt(4.0 / s);\n"
-  "  colour = vec4(dot(me, me) <= 0.0 ? vec3(0.0) : mix(vec3(1.0), mix(vec3(0.0), vec3(1.0), e), s), 1.0);\n"
+  "  float s = weight + sqr(l1) + sqr(l2) + sqr(l3) + sqr(l4);\n"
+  "  s = sqrt(weight / s);\n"
+  "  colour = vec4(dot(me, me) <= 0.0 ? vec3(1.0, 0.7, 0.0) : vec3(mix(0.0, mix(0.9, 1.0, e), s)), 1.0);\n"
   "}\n"
   ;
 
@@ -108,6 +109,8 @@ struct state_s {
 
   bool show_lines;
   GLuint show_lines_u;
+  double log2weight;
+  GLuint weight_u;
 
   int width;
   int height;
@@ -204,6 +207,14 @@ static void key_handler(GLFWwindow *window, int key, int scancode, int action, i
           state->should_save_when_done = true;
         }
         break;
+      case GLFW_KEY_9:
+        state->log2weight -= 0.25;
+        state->should_redraw = true;
+        break;
+      case GLFW_KEY_0:
+        state->log2weight += 0.25;
+        state->should_redraw = true;
+        break;
     }
   }
 (void) scancode;
@@ -213,6 +224,7 @@ static void refresh_callback(void *user_pointer) {
   state_t *state = user_pointer;
   assert(state);
   glUniform1i(state->show_lines_u, state->show_lines);
+  glUniform1f(state->weight_u, exp2f(state->log2weight));
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glfwSwapBuffers(state->window);
 }
@@ -294,6 +306,7 @@ extern int main(int argc, char **argv) {
   }
   glUseProgram(program);
   state.show_lines_u = glGetUniformLocation(program, "show_lines");
+  state.weight_u = glGetUniformLocation(program, "weight");
 
   uint8_t *ppm = malloc(width * height * 3);
   assert(ppm);
