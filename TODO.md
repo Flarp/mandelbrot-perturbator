@@ -8,6 +8,7 @@ phase 2
 * don't use shape test
 * generate parallel and interruptible nucleus code
 * generate parallel and interruptible box period code
+* generate parallel and interruptible atom domain size estimate code
 * remove dependency on mandelbrot-numerics
 
 phase 3
