@@ -225,6 +225,7 @@ static void *FNAME(image_worker)(void *arg) {
       // find an appropriate initial reference
       bool ok = false;
       bool reused = false;
+      int period = 0;
       mpc_t nucleus;
       mpc_init2(nucleus, precision);
       mpc_set_ui_ui(nucleus, 0, 0, MPC_RNDNN);
@@ -241,6 +242,7 @@ static void *FNAME(image_worker)(void *arg) {
         mpc_norm(delta2, delta, MPFR_RNDN);
         if (mpfr_less_p(delta2, radius2)) {
           mpc_set(nucleus, img->last_reference, MPC_RNDNN);
+          period = img->last_period;
           if (! mpfr_zero_p(delta2)) {
             exponent = fmax(exponent, mpfr_get_exp(delta2) / 2);
           }
@@ -254,7 +256,7 @@ static void *FNAME(image_worker)(void *arg) {
       }
       if (! ok) {
         // try box period
-        int period = m_r_box_period_do(img->center, img->radius, maxiters);
+        period = m_r_box_period_do(img->center, img->radius, maxiters);
         if (period) {
           m_r_nucleus(nucleus, img->center, period, newton_steps_root);
           if (m_cardioid == m_r_shape(nucleus, period)) {
@@ -279,7 +281,7 @@ static void *FNAME(image_worker)(void *arg) {
         mpfr_sqr(radius2, img->radius, MPFR_RNDN);
         mpfr_mul_d(radius2, radius2, 65536, MPFR_RNDN);
 
-        for (int period = 1; period < maxiters; ++period) {
+        for (period = 1; period < maxiters; ++period) {
           if (! image_running(img)) {
             break;
           }
@@ -319,6 +321,7 @@ static void *FNAME(image_worker)(void *arg) {
       if (ok) {
         mpc_set_prec(img->last_reference, img->precision);
         mpc_set(img->last_reference, nucleus, MPC_RNDNN);
+        img->last_period = period;
       }
       mpc_set(ref->c, nucleus, MPC_RNDNN);
       mpc_sub(nucleus, ref->c, img->center, MPC_RNDNN);

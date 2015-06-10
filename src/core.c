@@ -20,6 +20,7 @@
 #include "m_r_nucleus.c"
 #include "m_r_shape.c"
 #include "m_r_box_period.c"
+#include "m_r_domain_size.c"
 
 static inline int max(int a, int b) {
   return a > b ? a : b;
@@ -74,6 +75,7 @@ struct perturbator {
 
   // cache
   mpc_t last_reference;
+  int last_period;
   struct z2c_series *series;
   struct series_node *nodes;
 
@@ -212,6 +214,7 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
 
   mpc_init2(img->last_reference, 53);
   mpc_set_ui_ui(img->last_reference, 0, 0, MPC_RNDNN);
+  img->last_period = 1;
 
   img->output = calloc(1, width * height * 4 * sizeof(*img->output));
 
@@ -346,4 +349,32 @@ static struct series_node *image_cached_approx(struct perturbator *img, bool reu
     pthread_mutex_unlock(&img->mutex);
     return 0;
   }
+}
+
+int perturbator_view_embedded_julia_set(struct perturbator *img, mpfr_t x, mpfr_t y, mpfr_t r) {
+  pthread_mutex_lock(&img->mutex);
+  bool ok = false;
+  fprintf(stderr, "%d\n", img->last_period);
+  if (img->last_period > 1) {
+    int prec = mpc_get_prec(img->last_reference);
+    mpfr_set_prec(x, prec);
+    mpfr_set_prec(y, prec);
+    mpfr_set(x, mpc_realref(img->last_reference), MPFR_RNDN);
+    mpfr_set(y, mpc_imagref(img->last_reference), MPFR_RNDN);
+    int partial = m_r_domain_size(r, img->last_reference, img->last_period);
+    mpc_t nucleus;
+    mpc_init2(nucleus, prec);
+    mpc_set(nucleus, img->last_reference, MPC_RNDNN);
+    mpfr_add(mpc_imagref(nucleus), mpc_imagref(nucleus), r, MPFR_RNDN);
+    m_r_nucleus(nucleus, nucleus, partial + img->last_period, img->newton_steps_root);
+    mpc_sub(nucleus, nucleus, img->last_reference, MPC_RNDNN);
+    mpc_norm(r, nucleus, MPFR_RNDN);
+    mpc_clear(nucleus);
+    mpfr_sqrt(r, r, MPFR_RNDN);
+    mpfr_mul_2si(r, r, 1, MPFR_RNDN);
+    mpfr_fprintf(stderr, "%Re\n%Re\n%Re\n", x, y, r);
+    ok = true;
+  }
+  pthread_mutex_unlock(&img->mutex);
+  return ok;
 }
