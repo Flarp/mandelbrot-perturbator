@@ -345,6 +345,9 @@ extern int main(int argc, char **argv) {
       break;
     }
 
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_FLOAT, perturbator_get_output(context));
+    refresh_callback(&state);
+
     while (! state.should_restart) {
 
       if (state.should_save_now || state.should_save_when_done) {
