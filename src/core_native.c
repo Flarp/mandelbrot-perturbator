@@ -190,6 +190,9 @@ void FNAME(release_refs)(struct perturbator *img) {
 static void *FNAME(image_worker)(void *arg) {
   struct perturbator *img = arg;
   image_log(img, LOG_QUEUE, "         ENTER\n");
+
+  pthread_mutex_lock(&img->mutex);
+
   int maxiters = img->maxiters;
   FTYPE escape_radius_2 = img->escape_radius_2;
   FTYPE log_escape_radius_2 = img->log_escape_radius_2;
@@ -198,6 +201,19 @@ static void *FNAME(image_worker)(void *arg) {
   int chunk = img->chunk;
   FTYPE glitch_threshold = img->glitch_threshold;
   int precision = img->precision;
+  mpc_t center;
+  mpc_init2(center, mpc_get_prec(img->center));
+  mpc_set(center, img->center, MPC_RNDNN);
+  mpfr_t radius;
+  mpfr_init2(radius, 53);
+  mpfr_set(radius, img->radius, MPFR_RNDN);
+  mpc_t last_reference;
+  mpc_init2(last_reference, mpc_get_prec(img->last_reference));
+  mpc_set(last_reference, img->last_reference, MPC_RNDNN);
+  int last_period = img->last_period;
+  float *output = img->output;
+
+  pthread_mutex_unlock(&img->mutex);
 
   complex FTYPE *z_d = malloc((1 + chunk) * sizeof(*z_d));
   FTYPE *z_size = malloc((1 + chunk) * sizeof(*z_size));
@@ -221,7 +237,7 @@ static void *FNAME(image_worker)(void *arg) {
 
     } else {
 
-      int exponent = mpfr_get_exp(img->radius);
+      int exponent = mpfr_get_exp(radius);
       // find an appropriate initial reference
       bool ok = false;
       bool reused = false;
@@ -236,13 +252,13 @@ static void *FNAME(image_worker)(void *arg) {
         mpfr_t delta2, radius2;
         mpfr_init2(delta2, 53);
         mpfr_init2(radius2, 53);
-        mpfr_sqr(radius2, img->radius, MPFR_RNDN);
+        mpfr_sqr(radius2, radius, MPFR_RNDN);
         mpfr_mul_d(radius2, radius2, 65536, MPFR_RNDN);
-        mpc_sub(delta, img->last_reference, img->center, MPC_RNDNN);
+        mpc_sub(delta, last_reference, center, MPC_RNDNN);
         mpc_norm(delta2, delta, MPFR_RNDN);
         if (mpfr_less_p(delta2, radius2)) {
-          mpc_set(nucleus, img->last_reference, MPC_RNDNN);
-          period = img->last_period;
+          mpc_set(nucleus, last_reference, MPC_RNDNN);
+          period = last_period;
           if (! mpfr_zero_p(delta2)) {
             exponent = fmax(exponent, mpfr_get_exp(delta2) / 2);
           }
@@ -256,9 +272,9 @@ static void *FNAME(image_worker)(void *arg) {
       }
       if (! ok) {
         // try box period
-        period = m_r_box_period_do(img->center, img->radius, maxiters);
+        period = m_r_box_period_do(center, radius, maxiters);
         if (period) {
-          m_r_nucleus(nucleus, img->center, period, newton_steps_root);
+          m_r_nucleus(nucleus, center, period, newton_steps_root);
           if (m_cardioid == m_r_shape(nucleus, period)) {
             ok = true;
             image_log(img, LOG_CACHE, "         BOXED                  %8d\n", period);
@@ -278,7 +294,7 @@ static void *FNAME(image_worker)(void *arg) {
         mpfr_set_d(mz2, 65536, MPFR_RNDN);
         mpfr_init2(dc2, 53);
         mpfr_init2(radius2, 53);
-        mpfr_sqr(radius2, img->radius, MPFR_RNDN);
+        mpfr_sqr(radius2, radius, MPFR_RNDN);
         mpfr_mul_d(radius2, radius2, 65536, MPFR_RNDN);
 
         for (period = 1; period < maxiters; ++period) {
@@ -286,7 +302,7 @@ static void *FNAME(image_worker)(void *arg) {
             break;
           }
           mpc_sqr(z, z, MPC_RNDNN);
-          mpc_add(z, z, img->center, MPC_RNDNN);
+          mpc_add(z, z, center, MPC_RNDNN);
           mpc_norm(z2, z, MPFR_RNDN);
           if (mpfr_get_d(z2, MPFR_RNDN) > escape_radius_2) {
             break;
@@ -319,12 +335,14 @@ static void *FNAME(image_worker)(void *arg) {
       }
 
       if (ok) {
+        pthread_mutex_lock(&img->mutex);
         mpc_set_prec(img->last_reference, img->precision);
         mpc_set(img->last_reference, nucleus, MPC_RNDNN);
         img->last_period = period;
+        pthread_mutex_unlock(&img->mutex);
       }
       mpc_set(ref->c, nucleus, MPC_RNDNN);
-      mpc_sub(nucleus, ref->c, img->center, MPC_RNDNN);
+      mpc_sub(nucleus, ref->c, center, MPC_RNDNN);
       complex FTYPE dc = -FMPCGET(nucleus, MPC_RNDNN);
       mpc_clear(nucleus);
       mpc_set_ui_ui(ref->z, 0, 0, MPC_RNDNN);
@@ -399,54 +417,61 @@ static void *FNAME(image_worker)(void *arg) {
       int active_count = 0;
       int glitch_count = 0;
 
-      #pragma omp parallel for      
+      #pragma omp parallel for
       for (int k = 0; k < input_count; ++k) {
-        struct FNAME(pixel) *in = &ref->px[0][k];
-        complex FTYPE z = in->z;
-        complex FTYPE c = in->c;
-        int index = in->index;
+        if (image_running(img)) {
 
-        bool active = true;
-        for (int i = 1; i <= chunk; ++i) {
+          struct FNAME(pixel) *in = &ref->px[0][k];
+          complex FTYPE z = in->z;
+          complex FTYPE c = in->c;
+          int index = in->index;
 
-          z = 2 * z_d[i-1] * z + z * z + c;
-          complex FTYPE rz = z_d[i] + z;
-          FTYPE rz2 = FNAME(cnorm)(rz);
-  
-          if (rz2 < z_size[i]) {
-            // glitched
-            int my_glitch_count;
+          bool active = true;
+          for (int i = 1; i <= chunk; ++i) {
+
+            z = 2 * z_d[i-1] * z + z * z + c;
+            complex FTYPE rz = z_d[i] + z;
+            FTYPE rz2 = FNAME(cnorm)(rz);
+
+            if (rz2 < z_size[i]) {
+              // glitched
+              int my_glitch_count;
+              #pragma omp atomic capture
+              my_glitch_count = glitch_count++;
+              struct FNAME(pixel) *out = &glitched[my_glitch_count];
+              out->c = c;
+              out->z = rz;
+              out->index = index;
+              out->iters = iters + i;
+              active = false;
+              break;
+            } else if (rz2 > escape_radius_2) {
+              // escaped
+              output[4 * index + 0] = iters + i;
+              output[4 * index + 1] = 1 - log2(log(rz2) / log_escape_radius_2);
+              output[4 * index + 2] = carg(rz) / twopi;
+              output[4 * index + 3] = start_id;
+              active = false;
+              break;
+            }
+
+          } // for i
+          if (active) {
+            // still iterating
+            int my_active_count;
             #pragma omp atomic capture
-            my_glitch_count = glitch_count++;
-            struct FNAME(pixel) *out = &glitched[my_glitch_count];
+            my_active_count = active_count++;
+            struct FNAME(pixel) *out = &ref->px[1][my_active_count];
             out->c = c;
-            out->z = rz;
+            out->z = z;
             out->index = index;
-            out->iters = iters + i;
-            active = false;
-            break;
-          } else if (rz2 > escape_radius_2) {
-            // escaped
-            img->output[4 * index + 0] = iters + i;
-            img->output[4 * index + 1] = 1 - log2(log(rz2) / log_escape_radius_2);
-            img->output[4 * index + 2] = carg(rz) / twopi;
-            img->output[4 * index + 3] = start_id;
-            active = false;
-            break;
           }
-        }
-        if (active) {
-          // still iterating
-          int my_active_count;
-          #pragma omp atomic capture
-          my_active_count = active_count++;
-          struct FNAME(pixel) *out = &ref->px[1][my_active_count];
-          out->c = c;
-          out->z = z;
-          out->index = index;
-        }
-      }
-  
+
+        } // if running
+      } // for k
+
+      if (! image_running(img)) { break; }
+
       if (glitch_count) {
         qsort(glitched, glitch_count, sizeof(*glitched), FNAME(cmp_pixel_by_iters_asc));
         int end = 0;

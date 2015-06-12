@@ -106,10 +106,7 @@ extern const float *perturbator_get_output(struct perturbator *img) {
 
 
 static bool image_running(struct perturbator *img) {
-  pthread_mutex_lock(&img->mutex);
-  bool running = img->running;
-  pthread_mutex_unlock(&img->mutex);
-  return running;
+  return img->running;
 }
 
 extern int perturbator_active(struct perturbator *img) {
@@ -198,7 +195,7 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
   img->escape_radius = escape_radius;
   img->glitch_threshold = glitch_threshold;
   img->precision = 53;
-  
+
   mpc_init2(img->center, 53);
   mpfr_init2(img->radius, 53);
 
@@ -351,30 +348,14 @@ static struct series_node *image_cached_approx(struct perturbator *img, bool reu
   }
 }
 
-int perturbator_view_embedded_julia_set(struct perturbator *img, mpfr_t x, mpfr_t y, mpfr_t r) {
+int perturbator_get_primary_reference(struct perturbator *img, mpfr_t x, mpfr_t y) {
   pthread_mutex_lock(&img->mutex);
-  bool ok = false;
-  fprintf(stderr, "%d\n", img->last_period);
-  if (img->last_period > 1) {
-    int prec = mpc_get_prec(img->last_reference);
-    mpfr_set_prec(x, prec);
-    mpfr_set_prec(y, prec);
-    mpfr_set(x, mpc_realref(img->last_reference), MPFR_RNDN);
-    mpfr_set(y, mpc_imagref(img->last_reference), MPFR_RNDN);
-    int partial = m_r_domain_size(r, img->last_reference, img->last_period);
-    mpc_t nucleus;
-    mpc_init2(nucleus, prec);
-    mpc_set(nucleus, img->last_reference, MPC_RNDNN);
-    mpfr_add(mpc_imagref(nucleus), mpc_imagref(nucleus), r, MPFR_RNDN);
-    m_r_nucleus(nucleus, nucleus, partial + img->last_period, img->newton_steps_root);
-    mpc_sub(nucleus, nucleus, img->last_reference, MPC_RNDNN);
-    mpc_norm(r, nucleus, MPFR_RNDN);
-    mpc_clear(nucleus);
-    mpfr_sqrt(r, r, MPFR_RNDN);
-    mpfr_mul_2si(r, r, 1, MPFR_RNDN);
-    mpfr_fprintf(stderr, "%Re\n%Re\n%Re\n", x, y, r);
-    ok = true;
-  }
+  int period = img->last_period;
+  int prec = mpc_get_prec(img->last_reference);
+  mpfr_set_prec(x, prec);
+  mpfr_set_prec(y, prec);
+  mpfr_set(x, mpc_realref(img->last_reference), MPFR_RNDN);
+  mpfr_set(y, mpc_imagref(img->last_reference), MPFR_RNDN);
   pthread_mutex_unlock(&img->mutex);
-  return ok;
+  return period;
 }
