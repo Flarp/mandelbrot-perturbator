@@ -33,7 +33,7 @@ class Collect e where
 normalize :: (Simplify e, Collect e) => e -> e
 normalize = simplify . collect . simplify
 
-data E = Sum [E] | Product [E] | N Integer | A Integer | Z | C | DZ | DC
+data E = Sum [E] | Product [E] | N Integer | A Integer | Z | C | DeltaZ | DeltaC
   deriving (Read, Show, Eq, Ord)
 
 instance Num E where
@@ -93,8 +93,8 @@ instance Collect E where
   collect e = e
 
 perturb :: E -> E
-perturb Z = Z + DZ
-perturb C = C + DC
+perturb Z = Z + DeltaZ
+perturb C = C + DeltaC
 perturb (Sum es) = Sum (map perturb es)
 perturb (Product es) = Product (map perturb es)
 perturb e = e
@@ -103,12 +103,12 @@ perturbed :: E -> E
 perturbed e = perturb e - e
 
 series :: Integer -> E
-series n = sum [ A i * DC ^ i | i <- [1 .. n] ]
+series n = sum [ A i * DeltaC ^ i | i <- [1 .. n] ]
 
 sub :: E -> E -> E
 sub e (Sum es) = Sum (map (sub e) es)
 sub e (Product es) = Product (map (sub e) es)
-sub e DZ = e
+sub e DeltaZ = e
 sub _ f = f
 
 collate :: E -> [(Integer, E)]
@@ -116,13 +116,13 @@ collate (Sum es) = map accum . groupOn fst . sortOn fst . map single $ es
   where
     single (Product fs) = (toInteger (length gs), Product (reverse hs))
       where
-        (gs, hs) = span (DC ==) . reverse $ fs
+        (gs, hs) = span (DeltaC ==) . reverse $ fs
     single e = single (Product [e])
     accum ps = (fst (head ps), sum (map snd ps))
 collate e = collate (Sum [e])
 
 
-data CE = CSum [CE] | CProduct [CE] | CN Integer | ARe Integer | AIm Integer | ZRe | ZIm | CRe | CIm | DZRe | DZIm | DCRe | DCIm | I
+data CE = CSum [CE] | CProduct [CE] | CN Integer | ARe Integer | AIm Integer | ZRe | ZIm | CRe | CIm | DeltaZRe | DeltaZIm | DeltaCRe | DeltaCIm | I
   deriving (Read, Show, Eq, Ord)
 
 instance Num CE where
@@ -191,8 +191,8 @@ instance Collect CE where
 complex :: E -> CE
 complex Z  = ZRe  + I * ZIm
 complex C  = CRe  + I * CIm
-complex DZ = DZRe + I * DZIm
-complex DC = DCRe + I * DCIm
+complex DeltaZ = DeltaZRe + I * DeltaZIm
+complex DeltaC = DeltaCRe + I * DeltaCIm
 complex (A n) = ARe n + I * AIm n
 complex (N n) = CN n
 complex (Sum es) = CSum (map complex es)
