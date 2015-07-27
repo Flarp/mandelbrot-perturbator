@@ -3,7 +3,7 @@
 -- License GPL3+ http://www.gnu.org/licenses/gpl.html
 
 {-# LANGUAGE FlexibleInstances #-}
-module Main (main) where
+--module Main (main) where
 
 import Control.Monad (forM_, unless)
 import Control.Monad.Trans.RWS (put, get, tell, execRWS, RWS)
@@ -17,12 +17,19 @@ import Data.Monoid (Monoid, (<>))
 import Data.Set (Set)
 import qualified Data.Set as S
 
+
+--import Debug.Trace (traceShow)
+--debug x = traceShow x x
+
 -- new in ghc-7.10
 sortOn :: Ord o => (a -> o) -> [a] -> [a]
 sortOn f = sortBy (compare `on` f)
 
 groupOn :: Eq e => (a -> e) -> [a] -> [[a]]
 groupOn f = groupBy ((==) `on` f)
+
+class Diff e where
+  diff :: e -> e
 
 class Simplify e where
   simplify :: e -> e
@@ -33,7 +40,7 @@ class Collect e where
 normalize :: (Simplify e, Collect e) => e -> e
 normalize = simplify . collect . simplify
 
-data E = Sum [E] | Product [E] | N Integer | A Integer | Z | C | DeltaZ | DeltaC
+data E = Sum [E] | Product [E] | N Integer | A Integer | Z | C | DeltaZ | DiffA Integer | DiffZ | DiffDeltaZ | DeltaC{- must be last -}
   deriving (Read, Show, Eq, Ord)
 
 instance Num E where
@@ -41,6 +48,18 @@ instance Num E where
   e + f = Sum [e, f]
   e * f = Product [e, f]
   negate e = Product [N (-1), e]
+
+instance Diff E where
+  diff (Sum es) = Sum (map diff es)
+  diff (Product []) = 0
+  diff (Product (e:es)) = diff e * Product es + e * diff (Product es)
+  diff (N _) = 0
+  diff (A n) = DiffA n
+  diff Z = DiffZ
+  diff C = 1
+  diff DeltaZ = DiffDeltaZ
+  diff DeltaC = 0
+  diff e = error $ "diff: " ++ show e
 
 instance Simplify E where
   simplify (Sum []) = 0
@@ -122,7 +141,13 @@ collate (Sum es) = map accum . groupOn fst . sortOn fst . map single $ es
 collate e = collate (Sum [e])
 
 
-data CE = CSum [CE] | CProduct [CE] | CN Integer | ARe Integer | AIm Integer | ZRe | ZIm | CRe | CIm | DeltaZRe | DeltaZIm | DeltaCRe | DeltaCIm | I
+data CE
+  = CSum [CE] | CProduct [CE] | CN Integer
+  | ARe Integer | AIm Integer | ZRe | ZIm | CRe | CIm
+  | DeltaZRe | DeltaZIm | DeltaCRe | DeltaCIm
+  | DiffARe Integer | DiffAIm Integer
+  | DiffZRe | DiffZIm | DiffDeltaZRe | DiffDeltaZIm
+  | I
   deriving (Read, Show, Eq, Ord)
 
 instance Num CE where
@@ -197,6 +222,9 @@ complex (A n) = ARe n + I * AIm n
 complex (N n) = CN n
 complex (Sum es) = CSum (map complex es)
 complex (Product es) = CProduct (map complex es)
+complex DiffZ = DiffZRe + I * DiffZIm
+complex DiffDeltaZ = DiffDeltaZRe + I * DiffDeltaZIm
+complex (DiffA n) = DiffARe n + I * DiffAIm n
 
 newtype Pair t = Pair{ unPair :: (t, t) }
   deriving (Read, Show, Eq, Ord)
@@ -254,9 +282,13 @@ ovar CRe = OVar 0
 ovar CIm = OVar 1
 ovar ZRe = OVar 2
 ovar ZIm = OVar 3
-ovar (ARe n) = OVar $ 2 * n + 2
-ovar (AIm n) = OVar $ 2 * n + 3
-ovar e = error (show e)
+ovar DiffZRe = OVar 4
+ovar DiffZIm = OVar 5
+ovar (ARe n) = OVar $ 4 * n + 2
+ovar (AIm n) = OVar $ 4 * n + 3
+ovar (DiffARe n) = OVar $ 4 * n + 4
+ovar (DiffAIm n) = OVar $ 4 * n + 5
+ovar e = error $ "ovar: " ++ show e
 
 data PSum = PSum [PMul1]
   deriving (Read, Show, Eq, Ord)
@@ -317,7 +349,7 @@ instance Compile [OPower] where
     (ys, zs) -> P'Mul (compile ys) (compile zs)
 
 instance Compile PMul1 where
-  compile p@(PMul1 _ []) = error (show p)
+  compile p@(PMul1 _ []) = error $ "compile: " ++ show p
   compile (PMul1 1 xs) = compile xs
   compile (PMul1 n xs) = P'Mul1 (compile xs) n
 
@@ -328,7 +360,7 @@ instance Compile [PMul2] where
     (ys, zs) -> P'Add2 (compile ys) (compile zs)
 
 instance Compile PSum where
-  compile p@(PSum []) = error (show p)
+  compile p@(PSum []) = error $ "compile:  " ++ show p
   compile (PSum xs) = compile xs
 
 instance Compile [PMul1] where
@@ -419,7 +451,7 @@ renames phases renamings = map f phases
     h (Right r) = case filter (S.member r) rens of
       [] -> Right r
       [s] -> Right (F.minimum s) -- F. not needed with ghc-7.10
-      ss -> error (show ss)
+      ss -> error $ "renames: " ++ show ss
     h l = l
 
 renamem :: [Phase] -> Map Int Int -> [Phase]
@@ -476,8 +508,8 @@ codegen order fname ps =
   \\n\
   \static inline int max(int a, int b) { return a > b ? a : b; }\n\
   \\n\
-  \static const struct {\n" ++ unlines (map struct ps) ++ "  " ++ int ++ " v[" ++ show order ++ "][2];\n} " ++ stem ++ "_series_spec =\n\
-  \{\n" ++ intercalate "\n,\n" (map values ps ++ [valids (last ps)]) ++ "};\n\
+  \static const struct {\n" ++ unlines (map struct ps) ++ "  " ++ int ++ " v[" ++ show order ++ "][2];\n  " ++ int ++ " dv[" ++ show order ++"][2];\n} " ++ stem ++ "_series_spec =\n\
+  \{\n" ++ intercalate "\n,\n" (map values ps ++ [valids (last ps), dvalids (last ps)]) ++ "};\n\
   \\n\
   \struct " ++ stem ++ "_series {\n\
   \  mpfr_t v[" ++ show count ++ "];\n\
@@ -497,6 +529,7 @@ codegen order fname ps =
   \  mpfr_set(s->v[2], cx, MPFR_RNDN);\n\
   \  mpfr_set(s->v[3], cy, MPFR_RNDN);\n\
   \  mpfr_set_si(s->v[4], 1, MPFR_RNDN);\n\
+  \  mpfr_set_si(s->v[6], 1, MPFR_RNDN);\n\
   \  s->n = 1;\n\
   \  return s;\n\
   \}\n\
@@ -514,24 +547,33 @@ codegen order fname ps =
   \\n\
   \bool " ++ stem ++ "_series_step(struct " ++ stem ++ "_series *s, int exponent, int threshold) {\n\n" ++
   unlines (map genphase (init ps)) ++
-  "  bool valid = true;\n\
+  "  bool valid = true, dvalid = true;\n\
   \  int e0;\n\
   \  int e1;\n\
+  \  int de0;\n\
+  \  int de1;\n\
   \  for (int i = 0; i < " ++ show order ++ "; ++i) {\n\
   \    e1 = INT_MIN;\n\
+  \    de1 = INT_MIN;\n\
   \    for (int j = 0; j < 2; ++j) {\n\
   \      if (! mpfr_zero_p(s->v[" ++ stem ++ "_series_spec.v[i][j]])) {\n\
   \        e1 = max(e1, mpfr_get_exp(s->v[" ++ stem ++ "_series_spec.v[i][j]]));\n\
   \      }\n\
+  \      if (! mpfr_zero_p(s->v[" ++ stem ++ "_series_spec.dv[i][j]])) {\n\
+  \        de1 = max(de1, mpfr_get_exp(s->v[" ++ stem ++ "_series_spec.dv[i][j]]));\n\
+  \      }\n\
   \    }\n\
   \    if (i > 0) {\n\
   \      valid = e0 - exponent >= e1 + threshold;\n\
+  \      dvalid = de0 - exponent >= de1 + threshold;\n\
   \      e0 = max(e0 - exponent, e1);\n\
+  \      de0 = max(de0 - exponent, de1);\n\
   \    } else {\n\
   \      e0 = e1;\n\
+  \      de0 = de1;\n\
   \    }\n\
   \  }\n\
-  \  if (! valid) { return false; }\n\
+  \  if ((! valid) || (! dvalid)) { return false; }\n\
   \\n\
   \  s->n += 1;\n\n" ++
   unlines [genphase (last ps)] ++
@@ -570,6 +612,7 @@ codegen order fname ps =
   , (stem ++ "_native.c",
   "struct FNAME(" ++ stem ++ "_approx) {\n\
   \  complex FTYPE v[" ++ show order ++ "];\n\
+  \  complex FTYPE dv[" ++ show (order + 1) ++ "];\n\
   \  int exponent;\n\
   \};\n\
   \\n\
@@ -577,29 +620,44 @@ codegen order fname ps =
   \  struct FNAME(" ++ stem ++ "_approx) *a = malloc(sizeof(*a));\n\
   \  mpfr_t t;\n\
   \  mpfr_init2(t, mpfr_get_prec(s->v[0]));\n\
+  \  {\n\
+  \    FTYPE dre = FMPFRGET(s->v[4], MPFR_RNDN);\n\
+  \    FTYPE dim = FMPFRGET(s->v[5], MPFR_RNDN);\n\
+  \    a->dv[0] = dre + I * dim;\n\
+  \  }\n\
   \  for (int i = 0; i < " ++ show order ++ "; ++i) {\n\
-  \    mpfr_set(t, s->v[2 * i + 4], MPFR_RNDN);\n\
+  \    mpfr_set(t, s->v[4 * (i + 1) + 2], MPFR_RNDN);\n\
   \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
   \    FTYPE re = FMPFRGET(t, MPFR_RNDN);\n\
-  \    mpfr_set(t, s->v[2 * i + 5], MPFR_RNDN);\n\
+  \    mpfr_set(t, s->v[4 * (i + 1) + 3], MPFR_RNDN);\n\
   \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
   \    FTYPE im = FMPFRGET(t, MPFR_RNDN);\n\
   \    a->v[i] = re + I * im;\n\
+  \    mpfr_set(t, s->v[4 * (i + 1) + 4], MPFR_RNDN);\n\
+  \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
+  \    FTYPE dre = FMPFRGET(t, MPFR_RNDN);\n\
+  \    mpfr_set(t, s->v[4 * (i + 1) + 5], MPFR_RNDN);\n\
+  \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
+  \    FTYPE dim = FMPFRGET(t, MPFR_RNDN);\n\
+  \    a->dv[i + 1] = dre + I * dim;\n\
   \  }\n\
   \  mpfr_clear(t);\n\
   \  a->exponent = -exponent;\n\
   \  return a;\n\
   \}\n\
   \\n\
-  \complex FTYPE FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, complex FTYPE dc) {\n\
+  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, complex FTYPE dc, complex FTYPE *dz_out, complex FTYPE *ddz_out) {\n\
   \  complex FTYPE z = FNAME(ldexp)(FNAME(creal)(dc), a->exponent) + I * FNAME(ldexp)(FNAME(cimag)(dc), a->exponent);\n\
   \  complex FTYPE zi = z;\n\
   \  complex FTYPE s = 0;\n\
+  \  complex FTYPE ds = a->dv[0];\n\
   \  for (int i = 0; i < " ++ show order ++ "; ++i) {\n\
   \    s += a->v[i] * zi;\n\
+  \    ds += a->dv[i + 1] * zi;\n\
   \    zi *= z;\n\
   \  }\n\
-  \  return s;\n\
+  \  *dz_out = s;\n\
+  \  *ddz_out = ds;\n\
   \}\n\
   \\n\
   \int FNAME(" ++ stem ++ "_approx_get_exponent)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
@@ -607,6 +665,9 @@ codegen order fname ps =
   \}\n\
   \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  return &a->v[0];\n\
+  \}\n\
+  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \  return &a->dv[0];\n\
   \}\n\
   \")
 
@@ -640,9 +701,12 @@ codegen order fname ps =
   \const complex float *" ++ stem ++ "_approx_get_coefficientsf(const struct " ++ stem ++ "_approxf *a);\n\
   \const complex double *" ++ stem ++ "_approx_get_coefficients(const struct " ++ stem ++ "_approx *a);\n\
   \const complex long double *" ++ stem ++ "_approx_get_coefficientsl(const struct " ++ stem ++ "_approxl *a);\n\
-  \complex float " ++ stem ++ "_approx_dof(const struct " ++ stem ++ "_approxf *a, complex float dc);\n\
-  \complex double " ++ stem ++ "_approx_do(const struct " ++ stem ++ "_approx *a, complex double dc);\n\
-  \complex long double " ++ stem ++ "_approx_dol(const struct " ++ stem ++ "_approxl *a, complex long double dc);\n\
+  \const complex float *" ++ stem ++ "_approx_get_dcoefficientsf(const struct " ++ stem ++ "_approxf *a);\n\
+  \const complex double *" ++ stem ++ "_approx_get_dcoefficients(const struct " ++ stem ++ "_approx *a);\n\
+  \const complex long double *" ++ stem ++ "_approx_get_dcoefficientsl(const struct " ++ stem ++ "_approxl *a);\n\
+  \void " ++ stem ++ "_approx_dof(const struct " ++ stem ++ "_approxf *a, complex float dc, complex float *dz_out, complex float *ddz_out);\n\
+  \void " ++ stem ++ "_approx_do(const struct " ++ stem ++ "_approx *a, complex double dc, complex double *dz_out, complex double *ddz_out);\n\
+  \void " ++ stem ++ "_approx_dol(const struct " ++ stem ++ "_approxl *a, complex long double dc, complex long double *dz_out, complex long double *ddz_out);\n\
   \\n\
   \#endif\n")]
 
@@ -660,11 +724,20 @@ codegen order fname ps =
     valids (_, Phase OpSet ras)
       = "{\n" ++ intercalate ",\n"
           [ "{ " ++ show re ++ " , " ++ show im ++ " }"
-          | o <- [0 .. fromIntegral order - 1]
+          | o <- [1 .. fromIntegral order]
           , (Right sre, [ Right re ]) <- ras
-          , sre == 2 * o + 4
+          , sre == 4 * o + 2
           , (Right sim, [ Right im ]) <- ras
-          , sim == 2 * o + 5
+          , sim == 4 * o + 3
+          ] ++ "\n}\n"
+    dvalids (_, Phase OpSet ras)
+      = "{\n" ++ intercalate ",\n"
+          [ "{ " ++ show re ++ " , " ++ show im ++ " }"
+          | o <- [1 .. fromIntegral order]
+          , (Right sre, [ Right re ]) <- ras
+          , sre == 4 * o + 4
+          , (Right sim, [ Right im ]) <- ras
+          , sim == 4 * o + 5
           ] ++ "\n}\n"
     genphase (p, Phase op ras) =
       "  #pragma omp parallel for\n\
@@ -678,7 +751,7 @@ codegen order fname ps =
           OpMul  -> o3  "mpfr_mul"
           OpSqr  -> o2  "mpfr_sqr"
           OpSet  -> o2  "mpfr_set"
-          _ -> error (show op) ) ++
+          _ -> error $ "genphase: " ++ show op ) ++
       "  }\n"
       where
         o3  s = "  " ++ s ++ "\n\
@@ -717,8 +790,11 @@ main''' stem f = codegenRef stem ref
         ves =
           [ (ZRe, fre)
           , (ZIm, fim)
+          , (DiffZRe, gre)
+          , (DiffZIm, gim)
           ]
         Pair (fre, fim) = cnormalize $ f
+        Pair (gre, gim) = cnormalize . normalize . diff $ f
 
 codegenMake :: String -> [Integer] -> [(FilePath, String)]
 codegenMake stem orders =
@@ -780,7 +856,8 @@ codegenWrap stem orders =
   \int FNAME(" ++ stem ++ "_approx_get_order)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
   \int FNAME(" ++ stem ++ "_approx_get_exponent)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
   \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
-  \complex FTYPE FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const complex FTYPE dc);\n\
+  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
+  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const complex FTYPE dc, complex FTYPE *dz_out, complex FTYPE *ddz_out);\n\
   \\n")
 
   , ( stem ++ ".c",
@@ -925,14 +1002,28 @@ codegenWrap stem orders =
   \  return 0;\n\
   \}\n\
   \\n\
-  \complex FTYPE FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const complex FTYPE dc) {\n\
+  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  if (! a) {\n\
   \    return 0;\n\
   \  }\n\
-  \  switch (a->order) {\n" ++
-  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_do)(a->approx, dc);" | order <- orders ] ++
+  \  switch (a->order) {" ++
+  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_dcoefficients)(a->approx);" | order <- orders ] ++
   "  }\n\
   \  return 0;\n\
+  \}\n\
+  \\n\
+  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const complex FTYPE dc, complex FTYPE *dz_out, complex FTYPE *ddz_out) {\n\
+  \  if (! a) {\n\
+  \    *dz_out = 0;\n\
+  \    *ddz_out = 0;\n\
+  \    return;\n\
+  \  }\n\
+  \  switch (a->order) {\n" ++
+  unlines [ "    case " ++ show order ++ ": FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_do)(a->approx, dc, dz_out, ddz_out); return;" | order <- orders ] ++
+  "  }\n\
+  \  *dz_out = 0;\n\
+  \  *ddz_out = 0;\n\
+  \  return;\n\
   \}\n\
   \\n")
   ]
@@ -1054,7 +1145,7 @@ codegenRef stem ps =
           OpMul  -> o3  "mpfr_mul"
           OpSqr  -> o2  "mpfr_sqr"
           OpSet  -> o2  "mpfr_set"
-          _ -> error (show op) ) ++
+          _ -> error $ "ref.genphase: " ++ show op ) ++
       "  }\n"
       where
         o3  s = "  " ++ s ++ "\n\
@@ -1088,17 +1179,33 @@ main'' stem n f = codegen n stem . zip [0..] . splitAdds . compact . inplace . r
     ves =
       [ (ZRe, fre)
       , (ZIm, fim)
+      , (DiffZRe, gre)
+      , (DiffZIm, gim)
       ] ++ concat
       [ [ (ARe i, are)
         , (AIm i, aim)
+        , (DiffARe j, bre)
+        , (DiffAIm j, bim)
         ]
-      | (i, Pair (are, aim)) <- ies
+      | ((i, Pair (are, aim)), (j, Pair (bre, bim))) <- ies `zip` jes
       ]
     Pair (fre, fim) = cnormalize $ f
+    Pair (gre, gim) = cnormalize . normalize . diff $ f
     ies
       = take (fromInteger n)
       . map (fmap cnormalize)
       . collate
+      . normalize
+      . sub (series n)
+      . normalize
+      . perturbed
+      $ f
+    jes
+      = take (fromInteger n)
+      . map (fmap cnormalize)
+      . collate
+      . normalize
+      . diff
       . normalize
       . sub (series n)
       . normalize

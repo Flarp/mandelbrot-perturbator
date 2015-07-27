@@ -12,6 +12,14 @@ static inline void FMPCADD(mpc_t rop, const mpc_t op1, complex FTYPE op2, mpc_rn
   FMPFRADD(mpc_imagref(rop), mpc_imagref(op1), FNAME(cimag)(op2), MPFR_RNDN);
 }
 
+static inline void FMPCDIV(mpc_t rop, const mpc_t op1, complex FTYPE op2, mpc_rnd_t rnd) {
+  mpc_t tmp;
+  mpc_init2(tmp, 64);
+  mpc_set_ldc(tmp, op2, MPC_RNDNN);
+  mpc_div(rop, op1, tmp, rnd);
+  mpc_clear(tmp);
+}
+
 static inline complex FTYPE FMPCGET(const mpc_t op, mpc_rnd_t rnd) {
 (void) rnd;
   return FMPFRGET(mpc_realref(op), MPFR_RNDN) + I * FMPFRGET(mpc_imagref(op), MPFR_RNDN);
@@ -20,6 +28,7 @@ static inline complex FTYPE FMPCGET(const mpc_t op, mpc_rnd_t rnd) {
 struct FNAME(pixel) {
   complex FTYPE c;
   complex FTYPE z;
+  complex FTYPE dz;
   uint32_t index;
   uint32_t iters;
 };
@@ -163,6 +172,7 @@ void FNAME(perturbator_start_internal)(struct perturbator *img) {
       int index = j * img->width + i;
       ref->px[0][index].c = c;
       ref->px[0][index].z = 0;
+      ref->px[0][index].dz = 0;
       ref->px[0][index].index = index;
     }
   }
@@ -197,7 +207,7 @@ static void *FNAME(image_worker)(void *arg) {
   FTYPE escape_radius_2 = img->escape_radius_2;
   FTYPE log_escape_radius_2 = img->log_escape_radius_2;
   int newton_steps_root = img->newton_steps_root;
-  int newton_steps_child = img->newton_steps_child;
+//  int newton_steps_child = img->newton_steps_child;
   int chunk = img->chunk;
   FTYPE glitch_threshold = img->glitch_threshold;
   int precision = img->precision;
@@ -207,6 +217,7 @@ static void *FNAME(image_worker)(void *arg) {
   mpfr_t radius;
   mpfr_init2(radius, 53);
   mpfr_set(radius, img->radius, MPFR_RNDN);
+  FTYPE pixel_spacing = FMPFRGET(radius, MPFR_RNDN) * (2.0 / img->height);
   mpc_t last_reference;
   mpc_init2(last_reference, mpc_get_prec(img->last_reference));
   mpc_set(last_reference, img->last_reference, MPC_RNDNN);
@@ -224,8 +235,16 @@ static void *FNAME(image_worker)(void *arg) {
     // find reference atom
     if (ref->parent) {
 
+      // using .z .dz to do one Newton step instead of using nucleus...
+      // nucleus = c - z / dz
       FMPCADD(ref->c, ref->parent->c, ref->px[0][ref->index].c, MPC_RNDNN);
-      m_r_nucleus(ref->c, ref->c, ref->period, newton_steps_child);
+      FMPCADD(ref->z, ref->parent->z, ref->px[0][ref->index].z, MPC_RNDNN);
+      FMPCDIV(ref->z, ref->z,         ref->px[0][ref->index].dz, MPC_RNDNN);
+      if (mpfr_number_p(mpc_realref(ref->z)) && mpfr_number_p(mpc_imagref(ref->z))) {
+        mpc_sub(ref->c, ref->c, ref->z, MPC_RNDNN);
+      }
+      mpfr_fprintf(stderr, "%Re\n%Re\n", mpc_realref(ref->c), mpc_imagref(ref->c));
+      // compute rebase offset
       mpc_sub(ref->z, ref->parent->c, ref->c, MPC_RNDNN);
       complex FTYPE dc = -FMPCGET(ref->z, MPC_RNDNN);
       mpc_set_ui_ui(ref->z, 0, 0, MPC_RNDNN);
@@ -359,7 +378,10 @@ static void *FNAME(image_worker)(void *arg) {
           #pragma omp parallel for
           for (int k = 0; k < count; ++k) {
             ref->px[0][k].c += dc;
-            ref->px[0][k].z = z2c_approx_dof(approx, ref->px[0][k].c);
+            complex float z, dz;
+            z2c_approx_dof(approx, ref->px[0][k].c, &z, &dz);
+            ref->px[0][k].z = z;
+            ref->px[0][k].dz = dz;
           }
           break;
         }
@@ -368,7 +390,10 @@ static void *FNAME(image_worker)(void *arg) {
           #pragma omp parallel for
           for (int k = 0; k < count; ++k) {
             ref->px[0][k].c += dc;
-            ref->px[0][k].z = z2c_approx_do (approx, ref->px[0][k].c);
+            complex double z, dz;
+            z2c_approx_do (approx, ref->px[0][k].c, &z, &dz);
+            ref->px[0][k].z = z;
+            ref->px[0][k].dz = dz;
           }
           break;
         }
@@ -377,7 +402,10 @@ static void *FNAME(image_worker)(void *arg) {
           #pragma omp parallel for
           for (int k = 0; k < count; ++k) {
             ref->px[0][k].c += dc;
-            ref->px[0][k].z = z2c_approx_dol(approx, ref->px[0][k].c);
+            complex long double z, dz;
+            z2c_approx_dol(approx, ref->px[0][k].c, &z, &dz);
+            ref->px[0][k].z = z;
+            ref->px[0][k].dz = dz;
           }
           break;
         }
@@ -393,7 +421,7 @@ static void *FNAME(image_worker)(void *arg) {
     // prepare for output pixels
     ref->px[1] = malloc(ref->count * sizeof(*ref->px[1]));
     struct FNAME(pixel) *glitched = malloc(ref->count * sizeof(*glitched));
-    int start_id = ref->start_id;
+//    int start_id = ref->start_id;
 
     for (int iters = ref->iters; iters < maxiters; iters += chunk) {
       if (! image_running(img)) {
@@ -422,15 +450,18 @@ static void *FNAME(image_worker)(void *arg) {
         if (image_running(img)) {
 
           struct FNAME(pixel) *in = &ref->px[0][k];
+          complex FTYPE dz = in->dz;
           complex FTYPE z = in->z;
           complex FTYPE c = in->c;
+          complex FTYPE rz = z_d[0] + z;
           int index = in->index;
 
           bool active = true;
           for (int i = 1; i <= chunk; ++i) {
 
+            dz = 2 * rz * dz + 1;
             z = 2 * z_d[i-1] * z + z * z + c;
-            complex FTYPE rz = z_d[i] + z;
+            rz = z_d[i] + z;
             FTYPE rz2 = FNAME(cnorm)(rz);
 
             if (rz2 < z_size[i]) {
@@ -441,6 +472,7 @@ static void *FNAME(image_worker)(void *arg) {
               struct FNAME(pixel) *out = &glitched[my_glitch_count];
               out->c = c;
               out->z = rz;
+              out->dz = dz;
               out->index = index;
               out->iters = iters + i;
               active = false;
@@ -448,9 +480,9 @@ static void *FNAME(image_worker)(void *arg) {
             } else if (rz2 > escape_radius_2) {
               // escaped
               output[4 * index + 0] = iters + i;
-              output[4 * index + 1] = 1 - log2(log(rz2) / log_escape_radius_2);
+              output[4 * index + 1] = 1 - log2(log(rz2) / log_escape_radius_2); // smooth iters
               output[4 * index + 2] = carg(rz) / twopi;
-              output[4 * index + 3] = start_id;
+              output[4 * index + 3] = sqrt(rz2) * log(rz2) / FNAME(cabs)(dz * pixel_spacing); // de
               active = false;
               break;
             }
@@ -464,6 +496,7 @@ static void *FNAME(image_worker)(void *arg) {
             struct FNAME(pixel) *out = &ref->px[1][my_active_count];
             out->c = c;
             out->z = z;
+            out->dz = dz;
             out->index = index;
           }
 

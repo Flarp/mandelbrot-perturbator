@@ -75,12 +75,14 @@ static const char *simple_frag =
   "  k += 16 * int(floor(t.x));\n"
   "  return k;\n"
   "}\n"
+/*
   "float sqr(float l) {\n"
   "  return l * l;\n"
   "}\n"
   "float sqr(vec2 l) {\n"
   "  return sqr(l.x + l.y);\n"
   "}\n"
+*/
   "void main() {\n"
   "  float e = 1.0;\n"
   "  vec2 dx = dFdx(texCoord);\n"
@@ -89,12 +91,15 @@ static const char *simple_frag =
   "    e = px(texCoord) == px(texCoord + dx + dy) && px(texCoord + dx) == px(texCoord + dy) ? 1.0 : 0.0;\n"
   "  }\n"
   "  vec2 me = texture(tex, texCoord).xy;\n"
+/*
   "  vec2 l1 = texture(tex, texCoord - dx).xy - me;\n"
   "  vec2 l2 = texture(tex, texCoord + dx).xy - me;\n"
   "  vec2 l3 = texture(tex, texCoord - dy).xy - me;\n"
   "  vec2 l4 = texture(tex, texCoord + dy).xy - me;\n"
   "  float s = weight + sqr(l1) + sqr(l2) + sqr(l3) + sqr(l4);\n"
   "  s = sqrt(weight / s);\n"
+*/
+  "  float s = tanh(clamp(texture(tex, texCoord).w, 0.0, 8.0));\n"
   "  colour = vec4(dot(me, me) <= 0.0 ? vec3(1.0, 0.7, 0.0) : vec3(mix(0.0, mix(0.9, 1.0, e), s)), 1.0);\n"
   "}\n"
   ;

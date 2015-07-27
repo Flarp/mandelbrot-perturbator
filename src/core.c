@@ -143,6 +143,7 @@ static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_
 #define FMPFRADD mpfr_add_d
 #define FMPCGET mpc_get_fltc
 #define FMPCADD mpc_add_fltc
+#define FMPCDIV mpc_div_fltc2
 #include "core_native.c"
 #undef FTYPE
 #undef FNAME
@@ -150,6 +151,7 @@ static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_
 #undef FMPFRADD
 #undef FMPCGET
 #undef FMPCADD
+#undef FMPCDIV
 #undef FT
 
 #define FT ft_double
@@ -159,6 +161,7 @@ static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_
 #define FMPFRADD mpfr_add_d
 #define FMPCGET mpc_get_dc2
 #define FMPCADD mpc_add_dc
+#define FMPCDIV mpc_div_dc2
 #include "core_native.c"
 #undef FTYPE
 #undef FNAME
@@ -166,6 +169,7 @@ static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_
 #undef FMPFRADD
 #undef FMPCGET
 #undef FMPCADD
+#undef FMPCDIV
 #undef FT
 
 #define FT ft_long_double
@@ -175,6 +179,7 @@ static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_
 #define FMPFRADD mpfr_add_ld
 #define FMPCGET mpc_get_ldc2
 #define FMPCADD mpc_add_ldc2
+#define FMPCDIV mpc_div_ldc2
 #include "core_native.c"
 #undef FTYPE
 #undef FNAME
@@ -182,6 +187,7 @@ static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_
 #undef FMPFRADD
 #undef FMPCGET
 #undef FMPCADD
+#undef FMPCDIV
 #undef FT
 
 extern struct perturbator *perturbator_new(int workers, int width, int height, int maxiters, int chunk, double escape_radius, double glitch_threshold) {
