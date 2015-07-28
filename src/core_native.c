@@ -43,8 +43,11 @@ static int FNAME(cmp_pixel_by_iters_asc)(const void *a, const void *b) {
 
 struct FNAME(reference) {
   struct FNAME(reference) *next;
-  struct FNAME(reference) *parent;
-  int use_count;
+
+  int has_parent;
+  mpc_t parent_c;
+  mpc_t parent_z;
+
   int queue_id;
   int start_id;
 
@@ -64,22 +67,22 @@ struct FNAME(reference) {
 
 static void FNAME(reference_release)(struct FNAME(reference) *ref) {
   if (ref) {
-    ref->use_count -= 1;
-    if (ref->use_count <= 0) {
-      FNAME(reference_release)(ref->parent);
-      ref->parent = 0;
-      if (ref->px[0]) {
-        free(ref->px[0]);
-        ref->px[0] = 0;
-      }
-      if (ref->px[1]) {
-        free(ref->px[1]);
-        ref->px[1] = 0;
-      }
-      mpc_clear(ref->c);
-      mpc_clear(ref->z);
-      free(ref);
+    if (ref->px[0]) {
+      free(ref->px[0]);
+      ref->px[0] = 0;
     }
+    if (ref->px[1]) {
+      free(ref->px[1]);
+      ref->px[1] = 0;
+    }
+    if (ref->has_parent) {
+      mpc_clear(ref->parent_c);
+      mpc_clear(ref->parent_z);
+      ref->has_parent = 0;
+    }
+    mpc_clear(ref->c);
+    mpc_clear(ref->z);
+    free(ref);
   }
 }
 
@@ -108,7 +111,6 @@ static struct FNAME(reference) *FNAME(image_dequeue)(struct perturbator *img, st
     ref = img->urefs.FNAME(refs);
     img->urefs.FNAME(refs) = ref->next;
     ref->start_id = (img->start_id += 1);
-    ref->use_count += 1;
     img->active_workers += 1;
     image_log(img, LOG_QUEUE, "%8d START  %8d%8d%8d%16d\n", ref->start_id, ref->queue_id, ref->iters, ref->period, ref->count);
   } else {
@@ -124,11 +126,12 @@ static void FNAME(image_enqueue)(struct perturbator *img, struct FNAME(reference
   assert(img->ft == FT);
   ref->queue_id = (img->queue_id += 1);
   image_log(img, LOG_QUEUE, "         QUEUE  %8d%8d%8d%16d\n", ref->queue_id, ref->iters, ref->period, ref->count);
-  // ensure parent isn't deallocated
-  if (ref->parent) {
-    ref->parent->use_count += 1;
+  // initialize
+  if (ref->has_parent) {
     mpc_init2(ref->z, img->precision);
+    mpc_set_ui_ui(ref->z, 0, 0, MPC_RNDNN);
     mpc_init2(ref->c, img->precision);
+    mpc_set_ui_ui(ref->c, 0, 0, MPC_RNDNN);
   }
   // link into reference queue (sorted by count descending)
   struct FNAME(reference) *before = 0;
@@ -160,7 +163,7 @@ void FNAME(perturbator_start_internal)(struct perturbator *img) {
   ref->iters = 0;
   ref->period = 0;
   ref->count = img->width * img->height;
-  ref->px[0] = malloc(ref->count * sizeof(*ref->px[0]));
+  ref->px[0] = calloc(1, ref->count * sizeof(*ref->px[0]));
   FTYPE vdiameter = 2.0 * FMPFRGET(img->radius, MPFR_RNDN);
   FTYPE hdiameter = img->width * vdiameter / img->height;
   #pragma omp parallel for
@@ -226,26 +229,29 @@ static void *FNAME(image_worker)(void *arg) {
 
   pthread_mutex_unlock(&img->mutex);
 
-  complex FTYPE *z_d = malloc((1 + chunk) * sizeof(*z_d));
-  FTYPE *z_size = malloc((1 + chunk) * sizeof(*z_size));
+  mpc_t *z_hi = calloc(1, (1 + chunk) * sizeof(*z_hi));
+  for (int k = 0; k <= chunk; ++k) {
+    mpc_init2(z_hi[k], precision);
+  }
+  complex FTYPE *z_d = calloc(1, (1 + chunk) * sizeof(*z_d));
+  FTYPE *z_size = calloc(1, (1 + chunk) * sizeof(*z_size));
 
   struct FNAME(reference) *ref = 0;
   while ( (ref = FNAME(image_dequeue)(img, ref)) ) {
 
     // find reference atom
-    if (ref->parent) {
+    if (ref->has_parent) {
 
       // using .z .dz to do one Newton step instead of using nucleus...
       // nucleus = c - z / dz
-      FMPCADD(ref->c, ref->parent->c, ref->px[0][ref->index].c, MPC_RNDNN);
-      FMPCADD(ref->z, ref->parent->z, ref->px[0][ref->index].z, MPC_RNDNN);
-      FMPCDIV(ref->z, ref->z,         ref->px[0][ref->index].dz, MPC_RNDNN);
+      FMPCADD(ref->c, ref->parent_c, ref->px[0][ref->index].c, MPC_RNDNN);
+      FMPCADD(ref->z, ref->parent_z, ref->px[0][ref->index].z, MPC_RNDNN);
+      FMPCDIV(ref->z, ref->z,        ref->px[0][ref->index].dz, MPC_RNDNN);
       if (mpfr_number_p(mpc_realref(ref->z)) && mpfr_number_p(mpc_imagref(ref->z))) {
         mpc_sub(ref->c, ref->c, ref->z, MPC_RNDNN);
       }
-      mpfr_fprintf(stderr, "%Re\n%Re\n", mpc_realref(ref->c), mpc_imagref(ref->c));
       // compute rebase offset
-      mpc_sub(ref->z, ref->parent->c, ref->c, MPC_RNDNN);
+      mpc_sub(ref->z, ref->parent_c, ref->c, MPC_RNDNN);
       complex FTYPE dc = -FMPCGET(ref->z, MPC_RNDNN);
       mpc_set_ui_ui(ref->z, 0, 0, MPC_RNDNN);
       // rebase pixels to new reference
@@ -419,8 +425,8 @@ static void *FNAME(image_worker)(void *arg) {
     } // if parent
 
     // prepare for output pixels
-    ref->px[1] = malloc(ref->count * sizeof(*ref->px[1]));
-    struct FNAME(pixel) *glitched = malloc(ref->count * sizeof(*glitched));
+    ref->px[1] = calloc(1, ref->count * sizeof(*ref->px[1]));
+    struct FNAME(pixel) *glitched = calloc(1, ref->count * sizeof(*glitched));
 //    int start_id = ref->start_id;
 
     for (int iters = ref->iters; iters < maxiters; iters += chunk) {
@@ -429,10 +435,12 @@ static void *FNAME(image_worker)(void *arg) {
       }
 
       // compute ref chunk
+      mpc_set(z_hi[0], ref->z, MPC_RNDNN);
       z_d[0] = ref->z_d;
       for (int k = 1; k <= chunk; ++k) {
         mpc_sqr(ref->z, ref->z, MPC_RNDNN);
         mpc_add(ref->z, ref->z, ref->c, MPC_RNDNN);
+        mpc_set(z_hi[k], ref->z, MPC_RNDNN);
         z_d[k] = FMPCGET(ref->z, MPC_RNDNN);
       }
       ref->z_d = z_d[chunk];
@@ -525,13 +533,19 @@ static void *FNAME(image_worker)(void *arg) {
           // enqueue a new reference
           int count = end - start;
           struct FNAME(reference) *new_ref = calloc(1, sizeof(*new_ref));
-          new_ref->parent = ref;
-          new_ref->px[0] = malloc(count * sizeof(*ref->px[0]));
+          // copy parent
+          new_ref->has_parent = 1;
+          mpc_init2(new_ref->parent_c, img->precision);
+          mpc_set(new_ref->parent_c, ref->c, MPC_RNDNN);
+          mpc_init2(new_ref->parent_z, img->precision);
+          mpc_set(new_ref->parent_z, z_hi[start_iters - iters], MPC_RNDNN);
+          new_ref->period = start_iters;
+          new_ref->iters = start_iters;
+          // copy pixels
+          new_ref->px[0] = calloc(1, count * sizeof(*ref->px[0]));
           memcpy(new_ref->px[0], glitched + start, count * sizeof(*ref->px[0]));
           new_ref->count = count;
           new_ref->index = min_ix - start;
-          new_ref->period = start_iters;
-          new_ref->iters = start_iters;
           FNAME(image_enqueue)(img, new_ref);
 
         } // for start
@@ -539,9 +553,9 @@ static void *FNAME(image_worker)(void *arg) {
       if (active_count && active_count < ref->count) {
         free(ref->px[0]);
         ref->px[0] = ref->px[1];
-        ref->px[1] = malloc(active_count * sizeof(*ref->px[1]));
+        ref->px[1] = calloc(1, active_count * sizeof(*ref->px[1]));
         free(glitched);
-        glitched = malloc(active_count * sizeof(*glitched));
+        glitched = calloc(1, active_count * sizeof(*glitched));
       } else {
         struct FNAME(pixel) *tmp = ref->px[0];
         ref->px[0] = ref->px[1];
@@ -556,6 +570,10 @@ static void *FNAME(image_worker)(void *arg) {
     free(glitched);
   } // while ref
 
+  for (int k = 0; k <= chunk; ++k) {
+    mpc_clear(z_hi[k]);
+  }
+  free(z_hi);
   free(z_d);
   free(z_size);
 
