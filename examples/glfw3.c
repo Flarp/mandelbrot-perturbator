@@ -276,6 +276,7 @@ extern int main(int argc, char **argv) {
   double escape_radius = envd("escaperadius", 25);
   double glitch_threshold = envd("glitchthreshold", 1e-6);
   int precision = envi("precision", 53);
+  int zoom = envi("zoom", 0);
 
   mpfr_init2(state.radius, 53);
   envr(state.radius, "radius", "2.0");
@@ -359,89 +360,114 @@ extern int main(int argc, char **argv) {
   struct perturbator *context = perturbator_new(workers, width, height, maxiters, chunk, escape_radius, glitch_threshold);
 
   glfwSetWindowUserPointer(window, &state);
-  glfwSetMouseButtonCallback(window, button_handler);
-  glfwSetKeyCallback(window, key_handler);
 
-  bool first = true;
-  while (! glfwWindowShouldClose(window)) {
-
-    state.should_restart = false;
-//    fprintf(stderr, "start\n");
-    if (! first) {
-      perturbator_stop(context, true);
-    }
-    first = false;
-    perturbator_start(context, state.centerx, state.centery, state.radius);
-
-//    fprintf(stderr, "wait_timeout\n");
-    while (perturbator_active(context)) {
-      struct timespec delta = { 0, 33333333 };
-      nanosleep(&delta, 0);
-//      fprintf(stderr, "refresh\n");
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_FLOAT, perturbator_get_output(context));
-      refresh_callback(&state);
-
+  if (zoom) {
+    mpfr_set_d(state.radius, 256, MPFR_RNDN);
+    for (int z = 0; z < zoom; ++z) {
+      fprintf(stderr, "%8d FRAME\n", z);
       glfwPollEvents();
       if (glfwWindowShouldClose(window)) {
         break;
       }
-
-      if (state.should_save_now) {
-        state.should_save_now = false;
-        glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, ppm);
-        printf("P6\n%d %d\n255\n", width, height);
-        fwrite(ppm, width * height * 3, 1, stdout);
-        fflush(stdout);
+      perturbator_start(context, state.centerx, state.centery, state.radius);
+      perturbator_stop(context, false);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_FLOAT, perturbator_get_output(context));
+      refresh_callback(&state);
+      glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, ppm);
+      printf("P6\n%d %d\n255\n", width, height);
+      for (int y = height - 1; y >= 0; --y) {
+        fwrite(ppm + y * width * 3, width * 3, 1, stdout);
       }
+      fflush(stdout);
+      mpfr_div_2exp(state.radius, state.radius, 1, MPFR_RNDN);
+    }
 
-      handle_view_morph(context, &state);
+  } else {
+    glfwSetMouseButtonCallback(window, button_handler);
+    glfwSetKeyCallback(window, key_handler);
 
-      if (state.should_restart) {
-        state.should_restart = false;
-//        fprintf(stderr, "start\n");
+    bool first = true;
+    while (! glfwWindowShouldClose(window)) {
+
+      state.should_restart = false;
+  //    fprintf(stderr, "start\n");
+      if (! first) {
         perturbator_stop(context, true);
-        perturbator_start(context, state.centerx, state.centery, state.radius);
       }
-//      fprintf(stderr, "wait_timeout\n");
-    }
+      first = false;
+      perturbator_start(context, state.centerx, state.centery, state.radius);
 
-    if (glfwWindowShouldClose(window)) {
-      break;
-    }
+  //    fprintf(stderr, "wait_timeout\n");
+      while (perturbator_active(context)) {
+        struct timespec delta = { 0, 33333333 };
+        nanosleep(&delta, 0);
+  //      fprintf(stderr, "refresh\n");
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_FLOAT, perturbator_get_output(context));
+        refresh_callback(&state);
 
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_FLOAT, perturbator_get_output(context));
-    refresh_callback(&state);
+        glfwPollEvents();
+        if (glfwWindowShouldClose(window)) {
+          break;
+        }
 
-    while (! state.should_restart) {
+        if (state.should_save_now) {
+          state.should_save_now = false;
+          glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, ppm);
+          printf("P6\n%d %d\n255\n", width, height);
+          fwrite(ppm, width * height * 3, 1, stdout);
+          fflush(stdout);
+        }
 
-      if (state.should_save_now || state.should_save_when_done) {
-        state.should_save_now = false;
-        state.should_save_when_done = false;
-        glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, ppm);
-        printf("P6\n%d %d\n255\n", width, height);
-        fwrite(ppm, width * height * 3, 1, stdout);
-        fflush(stdout);
+        handle_view_morph(context, &state);
+
+        if (state.should_restart) {
+          state.should_restart = false;
+  //        fprintf(stderr, "start\n");
+          perturbator_stop(context, true);
+          perturbator_start(context, state.centerx, state.centery, state.radius);
+        }
+  //      fprintf(stderr, "wait_timeout\n");
       }
 
-      glfwWaitEvents();
       if (glfwWindowShouldClose(window)) {
         break;
       }
 
-//      if (state.should_redraw) {
-//        state.should_redraw = false;
-//        fprintf(stderr, "refresh\n");
-        refresh_callback(&state);
-//      }
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_FLOAT, perturbator_get_output(context));
+      refresh_callback(&state);
 
-      handle_view_morph(context, &state);
+      while (! state.should_restart) {
+
+        if (state.should_save_now || state.should_save_when_done) {
+          state.should_save_now = false;
+          state.should_save_when_done = false;
+          glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, ppm);
+          printf("P6\n%d %d\n255\n", width, height);
+          fwrite(ppm, width * height * 3, 1, stdout);
+          fflush(stdout);
+        }
+
+        glfwWaitEvents();
+        if (glfwWindowShouldClose(window)) {
+          break;
+        }
+
+  //      if (state.should_redraw) {
+  //        state.should_redraw = false;
+  //        fprintf(stderr, "refresh\n");
+          refresh_callback(&state);
+  //      }
+
+        handle_view_morph(context, &state);
+
+      }
 
     }
 
+  //  fprintf(stderr, "delete\n");
+    perturbator_stop(context, true);
   }
 
-//  fprintf(stderr, "delete\n");
-  perturbator_stop(context, true);
 //  image_delete(context);
   free(ppm);
   glfwDestroyWindow(window);
