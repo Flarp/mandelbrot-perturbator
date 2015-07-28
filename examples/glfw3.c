@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #include <mpfr.h>
@@ -265,6 +266,7 @@ static void handle_view_morph(struct perturbator *context, state_t *state) {
 
 extern int main(int argc, char **argv) {
   state_t state;
+  memset(&state, 0, sizeof(state));
 
   int workers = envi("threads", 4);
   int width = envi("width", 1280);
