@@ -297,7 +297,7 @@ static struct series_node *image_cached_approx(struct perturbator *img, bool reu
   if (! img->series) {
     img->series = z2c_series_new(img->order, mpc_realref(c), mpc_imagref(c));
   }
-  int exponent0 = 8;
+  int exponent0 = 16;
   if (img->nodes)  {
     exponent0 = img->nodes->exponent;
   }
@@ -339,8 +339,9 @@ static struct series_node *image_cached_approx(struct perturbator *img, bool reu
     }
   }
   // lookup in the cache
-  struct series_node *node = img->nodes;
+  struct series_node *node = img->nodes, *prev = img->nodes;
   while (node && node->exponent < exponent) {
+    prev = node;
     node = node->next;
   }
   if (node) {
@@ -350,7 +351,7 @@ static struct series_node *image_cached_approx(struct perturbator *img, bool reu
     return node;
   } else {
     pthread_mutex_unlock(&img->mutex);
-    return 0;
+    return prev;
   }
 }
 
