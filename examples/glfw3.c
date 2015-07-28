@@ -100,7 +100,7 @@ static const char *simple_frag =
   "  float s = weight + sqr(l1) + sqr(l2) + sqr(l3) + sqr(l4);\n"
   "  s = sqrt(weight / s);\n"
 */
-  "  float s = tanh(clamp(texture(tex, texCoord).w, 0.0, 8.0));\n"
+  "  float s = tanh(clamp(texture(tex, texCoord).w / weight, 0.0, 8.0));\n"
   "  colour = vec4(dot(me, me) <= 0.0 ? vec3(1.0, 0.7, 0.0) : vec3(mix(0.0, mix(0.9, 1.0, e), s)), 1.0);\n"
   "}\n"
   ;
@@ -277,6 +277,7 @@ extern int main(int argc, char **argv) {
   double glitch_threshold = envd("glitchthreshold", 1e-6);
   int precision = envi("precision", 53);
   int zoom = envi("zoom", 0);
+  double weight = envd("weight", 0);
 
   mpfr_init2(state.radius, 53);
   envr(state.radius, "radius", "2.0");
@@ -356,6 +357,7 @@ extern int main(int argc, char **argv) {
   state.width = width;
   state.height = height;
   state.precision = precision;
+  state.log2weight = weight;
 
   struct perturbator *context = perturbator_new(workers, width, height, maxiters, chunk, escape_radius, glitch_threshold);
 
