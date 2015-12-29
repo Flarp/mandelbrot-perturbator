@@ -3,7 +3,7 @@
 // License GPL3+ http://www.gnu.org/licenses/gpl.html
 
 #include <assert.h>
-#include <complex.h>
+#include <complex>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,11 +16,14 @@
 #include "perturbator.h"
 #include "generated/z2c.h"
 
+extern "C" {
+  using namespace std;
 #include "mandelbrot-numerics.h"
 #include "m_r_nucleus.c"
 #include "m_r_shape.c"
 #include "m_r_box_period.c"
 #include "m_r_domain_size.c"
+}
 
 static inline int max(int a, int b) {
   return a > b ? a : b;
@@ -191,7 +194,7 @@ static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_
 #undef FT
 
 extern struct perturbator *perturbator_new(int workers, int width, int height, int maxiters, int chunk, double escape_radius, double glitch_threshold) {
-  struct perturbator *img = calloc(1, sizeof(*img));
+  struct perturbator *img = (struct perturbator *) calloc(1, sizeof(*img));
 
   img->workers = workers;
   img->width = width;
@@ -219,7 +222,7 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
   mpc_set_ui_ui(img->last_reference, 0, 0, MPC_RNDNN);
   img->last_period = 1;
 
-  img->output = calloc(1, width * height * 4 * sizeof(*img->output));
+  img->output = (float *) calloc(1, width * height * 4 * sizeof(*img->output));
 
   pthread_mutex_init(&img->mutex, 0);
   pthread_cond_init(&img->cond, 0);
@@ -314,7 +317,7 @@ struct series_node *image_cached_approx(struct perturbator *img, bool reused, co
       if (img->nodes && iters == img->nodes->iters) {
         img->nodes->exponent = e;
       } else {
-        struct series_node *node = calloc(1, sizeof(*node));
+        struct series_node *node = (struct series_node *) calloc(1, sizeof(*node));
         node->next = img->nodes;
         node->exponent = e;
         node->iters = iters;

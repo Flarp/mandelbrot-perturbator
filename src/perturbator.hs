@@ -495,7 +495,7 @@ codegen :: Integer -> String -> [(Int, Phase)] -> [(FilePath, String)]
 codegen order fname ps =
 
   [ (stem ++ ".c",
-  "#include <complex.h>\n\
+  "#include <complex>\n\
   \#include <limits.h>\n\
   \#include <math.h>\n\
   \#include <stdbool.h>\n\
@@ -517,7 +517,7 @@ codegen order fname ps =
   \};\n\
   \\n\
   \struct " ++ stem ++ "_series *" ++ stem ++ "_series_new(const mpfr_t cx, const mpfr_t cy) {\n\
-  \  struct " ++ stem ++ "_series *s = malloc(sizeof(*s));\n\
+  \  struct " ++ stem ++ "_series *s = (struct " ++ stem ++ "_series *) malloc(sizeof(*s));\n\
   \  if (! s) { return 0; }\n\
   \  mpfr_prec_t p = max(mpfr_get_prec(cx), mpfr_get_prec(cy));\n\
   \  for (int i = 0; i < " ++ show count ++ "; ++i) {\n\
@@ -611,19 +611,19 @@ codegen order fname ps =
 
   , (stem ++ "_native.c",
   "struct FNAME(" ++ stem ++ "_approx) {\n\
-  \  complex FTYPE v[" ++ show order ++ "];\n\
-  \  complex FTYPE dv[" ++ show (order + 1) ++ "];\n\
+  \  std::complex<FTYPE> v[" ++ show order ++ "];\n\
+  \  std::complex<FTYPE> dv[" ++ show (order + 1) ++ "];\n\
   \  int exponent;\n\
   \};\n\
   \\n\
   \struct FNAME(" ++ stem ++ "_approx) *FNAME("  ++ stem ++ "_approx_new)(const struct " ++ stem ++ "_series *s, int exponent) {\n\
-  \  struct FNAME(" ++ stem ++ "_approx) *a = malloc(sizeof(*a));\n\
+  \  struct FNAME(" ++ stem ++ "_approx) *a = (struct FNAME(" ++ stem ++ "_approx) *) malloc(sizeof(*a));\n\
   \  mpfr_t t;\n\
   \  mpfr_init2(t, mpfr_get_prec(s->v[0]));\n\
   \  {\n\
   \    FTYPE dre = FMPFRGET(s->v[4], MPFR_RNDN);\n\
   \    FTYPE dim = FMPFRGET(s->v[5], MPFR_RNDN);\n\
-  \    a->dv[0] = dre + I * dim;\n\
+  \    a->dv[0] = std::complex<FTYPE>(dre, dim);\n\
   \  }\n\
   \  for (int i = 0; i < " ++ show order ++ "; ++i) {\n\
   \    mpfr_set(t, s->v[4 * (i + 1) + 2], MPFR_RNDN);\n\
@@ -632,25 +632,25 @@ codegen order fname ps =
   \    mpfr_set(t, s->v[4 * (i + 1) + 3], MPFR_RNDN);\n\
   \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
   \    FTYPE im = FMPFRGET(t, MPFR_RNDN);\n\
-  \    a->v[i] = re + I * im;\n\
+  \    a->v[i] = std::complex<FTYPE>(re, im);\n\
   \    mpfr_set(t, s->v[4 * (i + 1) + 4], MPFR_RNDN);\n\
   \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
   \    FTYPE dre = FMPFRGET(t, MPFR_RNDN);\n\
   \    mpfr_set(t, s->v[4 * (i + 1) + 5], MPFR_RNDN);\n\
   \    mpfr_mul_2si(t, t, (i + 1) * exponent, MPFR_RNDN);\n\
   \    FTYPE dim = FMPFRGET(t, MPFR_RNDN);\n\
-  \    a->dv[i + 1] = dre + I * dim;\n\
+  \    a->dv[i + 1] = std::complex<FTYPE>(dre, dim);\n\
   \  }\n\
   \  mpfr_clear(t);\n\
   \  a->exponent = -exponent;\n\
   \  return a;\n\
   \}\n\
   \\n\
-  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, complex FTYPE dc, complex FTYPE *dz_out, complex FTYPE *ddz_out) {\n\
-  \  complex FTYPE z = FNAME(ldexp)(FNAME(creal)(dc), a->exponent) + I * FNAME(ldexp)(FNAME(cimag)(dc), a->exponent);\n\
-  \  complex FTYPE zi = z;\n\
-  \  complex FTYPE s = 0;\n\
-  \  complex FTYPE ds = a->dv[0];\n\
+  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, std::complex<FTYPE> dc, std::complex<FTYPE> *dz_out, std::complex<FTYPE> *ddz_out) {\n\
+  \  std::complex<FTYPE> z(FNAME(ldexp)(std::real(dc), a->exponent), FNAME(ldexp)(std::imag(dc), a->exponent));\n\
+  \  std::complex<FTYPE> zi(z);\n\
+  \  std::complex<FTYPE> s(0);\n\
+  \  std::complex<FTYPE> ds(a->dv[0]);\n\
   \  for (int i = 0; i < " ++ show order ++ "; ++i) {\n\
   \    s += a->v[i] * zi;\n\
   \    ds += a->dv[i + 1] * zi;\n\
@@ -663,10 +663,10 @@ codegen order fname ps =
   \int FNAME(" ++ stem ++ "_approx_get_exponent)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  return a->exponent;\n\
   \}\n\
-  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \const std::complex<FTYPE> *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  return &a->v[0];\n\
   \}\n\
-  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \const std::complex<FTYPE> *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  return &a->dv[0];\n\
   \}\n\
   \")
@@ -675,7 +675,7 @@ codegen order fname ps =
   "#ifndef " ++ stem ++ "_h\n\
   \#define " ++ stem ++ "_h 1\n\
   \\n\
-  \#include <complex.h>\n\
+  \#include <complex>\n\
   \#include <mpfr.h>\n\
   \\n\
   \#include " ++ show (fname ++ "_ref.h") ++ "\n\
@@ -698,15 +698,15 @@ codegen order fname ps =
   \int " ++ stem ++ "_approx_get_exponentf(const struct " ++ stem ++ "_approxf *a);\n\
   \int " ++ stem ++ "_approx_get_exponent(const struct " ++ stem ++ "_approx *a);\n\
   \int " ++ stem ++ "_approx_get_exponentl(const struct " ++ stem ++ "_approxl *a);\n\
-  \const complex float *" ++ stem ++ "_approx_get_coefficientsf(const struct " ++ stem ++ "_approxf *a);\n\
-  \const complex double *" ++ stem ++ "_approx_get_coefficients(const struct " ++ stem ++ "_approx *a);\n\
-  \const complex long double *" ++ stem ++ "_approx_get_coefficientsl(const struct " ++ stem ++ "_approxl *a);\n\
-  \const complex float *" ++ stem ++ "_approx_get_dcoefficientsf(const struct " ++ stem ++ "_approxf *a);\n\
-  \const complex double *" ++ stem ++ "_approx_get_dcoefficients(const struct " ++ stem ++ "_approx *a);\n\
-  \const complex long double *" ++ stem ++ "_approx_get_dcoefficientsl(const struct " ++ stem ++ "_approxl *a);\n\
-  \void " ++ stem ++ "_approx_dof(const struct " ++ stem ++ "_approxf *a, complex float dc, complex float *dz_out, complex float *ddz_out);\n\
-  \void " ++ stem ++ "_approx_do(const struct " ++ stem ++ "_approx *a, complex double dc, complex double *dz_out, complex double *ddz_out);\n\
-  \void " ++ stem ++ "_approx_dol(const struct " ++ stem ++ "_approxl *a, complex long double dc, complex long double *dz_out, complex long double *ddz_out);\n\
+  \const std::complex<float> *" ++ stem ++ "_approx_get_coefficientsf(const struct " ++ stem ++ "_approxf *a);\n\
+  \const std::complex<double> *" ++ stem ++ "_approx_get_coefficients(const struct " ++ stem ++ "_approx *a);\n\
+  \const std::complex<long double> *" ++ stem ++ "_approx_get_coefficientsl(const struct " ++ stem ++ "_approxl *a);\n\
+  \const std::complex<float> *" ++ stem ++ "_approx_get_dcoefficientsf(const struct " ++ stem ++ "_approxf *a);\n\
+  \const std::complex<double> *" ++ stem ++ "_approx_get_dcoefficients(const struct " ++ stem ++ "_approx *a);\n\
+  \const std::complex<long double> *" ++ stem ++ "_approx_get_dcoefficientsl(const struct " ++ stem ++ "_approxl *a);\n\
+  \void " ++ stem ++ "_approx_dof(const struct " ++ stem ++ "_approxf *a, std::complex<float> dc, std::complex<float> *dz_out, std::complex<float> *ddz_out);\n\
+  \void " ++ stem ++ "_approx_do(const struct " ++ stem ++ "_approx *a, std::complex<double> dc, std::complex<double> *dz_out, std::complex<double> *ddz_out);\n\
+  \void " ++ stem ++ "_approx_dol(const struct " ++ stem ++ "_approxl *a, std::complex<long double> dc, std::complex<long double> *dz_out, std::complex<long double> *ddz_out);\n\
   \\n\
   \#endif\n")]
 
@@ -807,7 +807,7 @@ codegenMake stem orders =
   \.SUFFIXES:\n\
   \.PHONY: all\n\
   \%.o: %.c\n\
-  \\tgcc -std=c99 -pedantic -Wall -Wextra -fopenmp -O3 -march=native -c $<\n\
+  \\tg++ -std=c++11 -pedantic -Wall -Wextra -fopenmp -O3 -march=native -c $<\n\
   \\n")
   ]
 
@@ -817,8 +817,7 @@ codegenWrap stem orders =
   "#ifndef " ++ stem ++ "_h\n\
   \#define " ++ stem ++ "_h 1\n\
   \\n\
-  \#include <complex.h>\n\
-  \#include <stdbool.h>\n\
+  \#include <complex>\n\
   \\n\
   \#include " ++ show (stem ++ "_ref.h") ++ "\n\
   \struct " ++ stem ++ "_series;\n\
@@ -855,9 +854,9 @@ codegenWrap stem orders =
   \void FNAME(" ++ stem ++ "_approx_delete)(struct FNAME(" ++ stem ++ "_approx) *a);\n\
   \int FNAME(" ++ stem ++ "_approx_get_order)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
   \int FNAME(" ++ stem ++ "_approx_get_exponent)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
-  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
-  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
-  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const complex FTYPE dc, complex FTYPE *dz_out, complex FTYPE *ddz_out);\n\
+  \const std::complex<FTYPE> *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
+  \const std::complex<FTYPE> *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a);\n\
+  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const std::complex<FTYPE> dc, std::complex<FTYPE> *dz_out, std::complex<FTYPE> *ddz_out);\n\
   \\n")
 
   , ( stem ++ ".c",
@@ -873,7 +872,7 @@ codegenWrap stem orders =
   \};\n\
   \\n\
   \struct " ++ stem ++ "_series *" ++ stem ++ "_series_new(const int order, const mpfr_t cx, const mpfr_t cy) {\n\
-  \   struct " ++ stem ++ "_series *s = calloc(1, sizeof(*s));\n\
+  \   struct " ++ stem ++ "_series *s = (struct " ++ stem ++ "_series *) calloc(1, sizeof(*s));\n\
   \  if (! s) { return 0; }\n\
   \  s->order = order;\n\
   \  switch (order) {\n" ++
@@ -891,7 +890,7 @@ codegenWrap stem orders =
   \    return;\n\
   \  }\n\
   \  switch (s->order) {\n" ++
-  unlines [ "    case " ++ show order ++ ": " ++ stem ++ "_" ++ show order ++ "_series_delete(s->series); break;" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": " ++ stem ++ "_" ++ show order ++ "_series_delete((struct " ++ stem ++ "_" ++ show order ++ "_series *) s->series); break;" | order <- orders ] ++
   "  }\n\
   \  free(s);\n\
   \}\n\
@@ -901,7 +900,7 @@ codegenWrap stem orders =
   \    return false;\n\
   \  }\n\
   \  switch (s->order) {\n" ++
-  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_series_step(s->series, exponent, threshold);" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_series_step((struct " ++ stem ++ "_" ++ show order ++ "_series *) s->series, exponent, threshold);" | order <- orders ] ++
   "  }\n\
   \  return false;\n\
   \}\n\
@@ -911,7 +910,7 @@ codegenWrap stem orders =
   \    return 0;\n\
   \  }\n\
   \  switch (s->order) {\n" ++
-  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_series_get_n(s->series);" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_series_get_n((const struct " ++ stem ++ "_" ++ show order ++ "_series *) s->series);" | order <- orders ] ++
   "  }\n\
   \  return 0;\n\
   \}\n\
@@ -921,7 +920,7 @@ codegenWrap stem orders =
   \    return 0;\n\
   \  }\n\
   \  switch (s->order) {\n" ++
-  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_reference_new(s->series);" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": return " ++ stem ++ "_" ++ show order ++ "_reference_new((const struct " ++ stem ++ "_" ++ show order ++ "_series *) s->series);" | order <- orders ] ++
   " }\n\
   \  return 0;\n\
   \}\n\
@@ -955,10 +954,10 @@ codegenWrap stem orders =
   \  if (! s) {\n\
   \    return 0;\n\
   \  }\n\
-  \  struct FNAME(" ++ stem ++ "_approx) *a = calloc(1, sizeof(*a));\n\
+  \  struct FNAME(" ++ stem ++ "_approx) *a = (struct FNAME(" ++ stem ++ "_approx) *) calloc(1, sizeof(*a));\n\
   \  a->order = s->order;\n\
   \  switch (s->order) {\n" ++
-  unlines [ "    case " ++ show order ++ ": a->approx = FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_new)(s->series, exponent); break;" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": a->approx = FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_new)((const struct " ++ stem ++ "_" ++ show order ++ "_series *) s->series, exponent); break;" | order <- orders ] ++
   "  }\n\
   \  if (! a->approx) {\n\
   \    free(a);\n\
@@ -987,39 +986,39 @@ codegenWrap stem orders =
   \    return 0;\n\
   \  }\n\
   \  switch (a->order) {\n" ++
-  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_exponent)(a->approx);" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_exponent)((const struct FNAME(" ++ stem ++ "_" ++ show order ++ "_approx) *) a->approx);" | order <- orders ] ++
   "  }\n\
   \  return 0;\n\
   \}\n\
   \\n\
-  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \const std::complex<FTYPE> *FNAME(" ++ stem ++ "_approx_get_coefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  if (! a) {\n\
   \    return 0;\n\
   \  }\n\
   \  switch (a->order) {" ++
-  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_coefficients)(a->approx);" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_coefficients)((const struct FNAME(" ++ stem ++ "_" ++ show order ++ "_approx) *) a->approx);" | order <- orders ] ++
   "  }\n\
   \  return 0;\n\
   \}\n\
   \\n\
-  \const complex FTYPE *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
+  \const std::complex<FTYPE> *FNAME(" ++ stem ++ "_approx_get_dcoefficients)(const struct FNAME(" ++ stem ++ "_approx) *a) {\n\
   \  if (! a) {\n\
   \    return 0;\n\
   \  }\n\
   \  switch (a->order) {" ++
-  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_dcoefficients)(a->approx);" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": return FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_get_dcoefficients)((const struct FNAME(" ++ stem ++ "_" ++ show order ++ "_approx) *) a->approx);" | order <- orders ] ++
   "  }\n\
   \  return 0;\n\
   \}\n\
   \\n\
-  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const complex FTYPE dc, complex FTYPE *dz_out, complex FTYPE *ddz_out) {\n\
+  \void FNAME(" ++ stem ++ "_approx_do)(const struct FNAME(" ++ stem ++ "_approx) *a, const std::complex<FTYPE> dc, std::complex<FTYPE> *dz_out, std::complex<FTYPE> *ddz_out) {\n\
   \  if (! a) {\n\
   \    *dz_out = 0;\n\
   \    *ddz_out = 0;\n\
   \    return;\n\
   \  }\n\
   \  switch (a->order) {\n" ++
-  unlines [ "    case " ++ show order ++ ": FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_do)(a->approx, dc, dz_out, ddz_out); return;" | order <- orders ] ++
+  unlines [ "    case " ++ show order ++ ": FNAME(" ++ stem ++ "_" ++ show order ++ "_approx_do)((const struct FNAME(" ++ stem ++ "_" ++ show order ++ "_approx) *) a->approx, dc, dz_out, ddz_out); return;" | order <- orders ] ++
   "  }\n\
   \  *dz_out = 0;\n\
   \  *ddz_out = 0;\n\
@@ -1031,7 +1030,7 @@ codegenWrap stem orders =
 codegenRef :: String -> [(Int, Phase)] -> [(FilePath, String)]
 codegenRef stem ps =
   [(stem ++ "_ref.c",
-  "#include <complex.h>\n\
+  "#include <complex>\n\
   \#include <limits.h>\n\
   \#include <math.h>\n\
   \#include <stdbool.h>\n\
@@ -1052,7 +1051,7 @@ codegenRef stem ps =
   \};\n\
   \\n\
   \struct " ++ stem ++ "_reference *" ++ stem ++ "_reference_new(const mpfr_t cx, const mpfr_t cy, const mpfr_t zx, const mpfr_t zy, int n) {\n\
-  \  struct " ++ stem ++ "_reference *r = malloc(sizeof(*r));\n\
+  \  struct " ++ stem ++ "_reference *r = (struct " ++ stem ++ "_reference *) malloc(sizeof(*r));\n\
   \  if (! r) { return 0; }\n\
   \  mpfr_prec_t p = max(max(mpfr_get_prec(cx), mpfr_get_prec(cy)), max(mpfr_get_prec(zx), mpfr_get_prec(zy)));\n\
   \  for (int i = 0; i < " ++ show count ++ "; ++i) {\n\
@@ -1083,16 +1082,16 @@ codegenRef stem ps =
   \  return r->n;\n\
   \}\n\
   \\n\
-  \complex float " ++ stem ++ "_reference_get_zf(const struct " ++ stem ++ "_reference *r) {\n\
-  \  return mpfr_get_flt(r->v[2], MPFR_RNDN) + I * mpfr_get_flt(r->v[3], MPFR_RNDN);\n\
+  \std::complex<float> " ++ stem ++ "_reference_get_zf(const struct " ++ stem ++ "_reference *r) {\n\
+  \  return std::complex<float>(mpfr_get_flt(r->v[2], MPFR_RNDN), mpfr_get_flt(r->v[3], MPFR_RNDN));\n\
   \}\n\
   \\n\
-  \complex double " ++ stem ++ "_reference_get_z(const struct " ++ stem ++ "_reference *r) {\n\
-  \  return mpfr_get_d(r->v[2], MPFR_RNDN) + I * mpfr_get_d(r->v[3], MPFR_RNDN);\n\
+  \std::complex<double> " ++ stem ++ "_reference_get_z(const struct " ++ stem ++ "_reference *r) {\n\
+  \  return std::complex<double>(mpfr_get_d(r->v[2], MPFR_RNDN), mpfr_get_d(r->v[3], MPFR_RNDN));\n\
   \}\n\
   \\n\
-  \complex long double " ++ stem ++ "_reference_get_zl(const struct " ++ stem ++ "_reference *r) {\n\
-  \  return mpfr_get_ld(r->v[2], MPFR_RNDN) + I * mpfr_get_ld(r->v[3], MPFR_RNDN);\n\
+  \std::complex<long double> " ++ stem ++ "_reference_get_zl(const struct " ++ stem ++ "_reference *r) {\n\
+  \  return std::complex<long double>(mpfr_get_ld(r->v[2], MPFR_RNDN), mpfr_get_ld(r->v[3], MPFR_RNDN));\n\
   \}\n\
   \\n\
   \void " ++ stem ++ "_reference_get_zr(const struct " ++ stem ++ "_reference *ref, mpfr_t zx, mpfr_t zy) {\n\
@@ -1107,7 +1106,7 @@ codegenRef stem ps =
   "#ifndef " ++ stem ++ "_ref_h\n\
   \#define " ++ stem ++ "_ref_h 1\n\
   \\n\
-  \#include <complex.h>\n\
+  \#include <complex>\n\
   \#include <mpfr.h>\n\
   \\n\
   \struct " ++ stem ++ "_reference;\n\
@@ -1115,9 +1114,9 @@ codegenRef stem ps =
   \void " ++ stem ++ "_reference_delete(struct " ++ stem ++ "_reference *r);\n\
   \void " ++ stem ++ "_reference_step(struct " ++ stem ++ "_reference *r);\n\
   \int " ++ stem ++ "_reference_get_n(const struct " ++ stem ++ "_reference *r);\n\
-  \complex float " ++ stem ++ "_reference_get_zf(const struct " ++ stem ++ "_reference *r);\n\
-  \complex double " ++ stem ++ "_reference_get_z(const struct " ++ stem ++ "_reference *r);\n\
-  \complex long double " ++ stem ++ "_reference_get_zl(const struct " ++ stem ++ "_reference *r);\n\
+  \std::complex<float> " ++ stem ++ "_reference_get_zf(const struct " ++ stem ++ "_reference *r);\n\
+  \std::complex<double> " ++ stem ++ "_reference_get_z(const struct " ++ stem ++ "_reference *r);\n\
+  \std::complex<long double> " ++ stem ++ "_reference_get_zl(const struct " ++ stem ++ "_reference *r);\n\
   \void " ++ stem ++ "_reference_get_zr(const struct " ++ stem ++ "_reference *ref, mpfr_t zx, mpfr_t zy);\n\
   \\n\
   \#endif\n")]
@@ -1213,4 +1212,4 @@ main'' stem n f = codegen n stem . zip [0..] . splitAdds . compact . inplace . r
       $ f
 
 main :: IO ()
-main = mapM_ (uncurry writeFile) . main' "z2c" [4,6,8,12,16,24,32,48,64] $ Z^(2::Int) + C
+main = mapM_ (uncurry writeFile) . main' "z2c" [4,6,8,12,16,24{- ,32,48,64-}] $ Z^(2::Int) + C

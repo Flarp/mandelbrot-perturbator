@@ -2,40 +2,40 @@
 // Copyright (C) 2015 Claude Heiland-Allen
 // License GPL3+ http://www.gnu.org/licenses/gpl.html
 
-static inline FTYPE FNAME(cnorm)(complex FTYPE z) {
-  return FNAME(creal)(z) * FNAME(creal)(z) + FNAME(cimag)(z) * FNAME(cimag)(z);
+static inline FTYPE FNAME(cnorm)(std::complex<FTYPE> z) {
+  return std::norm(z);
 }
 
-static inline void FMPCADD(mpc_t rop, const mpc_t op1, complex FTYPE op2, mpc_rnd_t rnd) {
+static inline void FMPCADD(mpc_t rop, const mpc_t op1, std::complex<FTYPE> op2, mpc_rnd_t rnd) {
 (void) rnd;
-  FMPFRADD(mpc_realref(rop), mpc_realref(op1), FNAME(creal)(op2), MPFR_RNDN);
-  FMPFRADD(mpc_imagref(rop), mpc_imagref(op1), FNAME(cimag)(op2), MPFR_RNDN);
+  FMPFRADD(mpc_realref(rop), mpc_realref(op1), std::real(op2), MPFR_RNDN);
+  FMPFRADD(mpc_imagref(rop), mpc_imagref(op1), std::imag(op2), MPFR_RNDN);
 }
 
-static inline void FMPCDIV(mpc_t rop, const mpc_t op1, complex FTYPE op2, mpc_rnd_t rnd) {
+static inline void FMPCDIV(mpc_t rop, const mpc_t op1, std::complex<FTYPE> op2, mpc_rnd_t rnd) {
   mpc_t tmp;
   mpc_init2(tmp, 64);
-  mpc_set_ldc(tmp, op2, MPC_RNDNN);
+  mpc_set_ld_ld(tmp, std::real(op2), std::imag(op2), MPC_RNDNN);
   mpc_div(rop, op1, tmp, rnd);
   mpc_clear(tmp);
 }
 
-static inline complex FTYPE FMPCGET(const mpc_t op, mpc_rnd_t rnd) {
+static inline std::complex<FTYPE> FMPCGET(const mpc_t op, mpc_rnd_t rnd) {
 (void) rnd;
-  return FMPFRGET(mpc_realref(op), MPFR_RNDN) + I * FMPFRGET(mpc_imagref(op), MPFR_RNDN);
+  return std::complex<FTYPE>(FMPFRGET(mpc_realref(op), MPFR_RNDN), FMPFRGET(mpc_imagref(op), MPFR_RNDN));
 }
 
 struct FNAME(pixel) {
-  complex FTYPE c;
-  complex FTYPE z;
-  complex FTYPE dz;
+  std::complex<FTYPE> c;
+  std::complex<FTYPE> z;
+  std::complex<FTYPE> dz;
   uint32_t index;
   uint32_t iters;
 };
 
 static int FNAME(cmp_pixel_by_iters_asc)(const void *a, const void *b) {
-  const struct FNAME(pixel) *x = a;
-  const struct FNAME(pixel) *y = b;
+  const struct FNAME(pixel) *x = (const struct FNAME(pixel) *) a;
+  const struct FNAME(pixel) *y = (const struct FNAME(pixel) *) b;
   if (x->iters < y->iters) { return -1; }
   if (x->iters > y->iters) { return  1; }
 /*
@@ -61,8 +61,8 @@ struct FNAME(reference) {
   int iters;
   mpc_t c;
   mpc_t z;
-  complex FTYPE z_d_old;
-  complex FTYPE z_d;
+  std::complex<FTYPE> z_d_old;
+  std::complex<FTYPE> z_d;
   FTYPE z_d2eM6;
 
   struct FNAME(pixel) *px[2];
@@ -161,7 +161,7 @@ static void *FNAME(image_worker)(void *arg);
 
 void FNAME(perturbator_start_internal)(struct perturbator *img) {
   assert(img->ft == FT);
-  struct FNAME(reference) *ref = calloc(1, sizeof(*ref));
+  struct FNAME(reference) *ref = (struct FNAME(reference) *) calloc(1, sizeof(*ref));
   mpc_init2(ref->c, img->precision);
   mpc_init2(ref->z, img->precision);
   mpc_set(ref->c, img->center, MPC_RNDNN);
@@ -169,7 +169,7 @@ void FNAME(perturbator_start_internal)(struct perturbator *img) {
   ref->iters = 0;
   ref->period = 0;
   ref->count = img->width * img->height;
-  ref->px[0] = calloc(1, ref->count * sizeof(*ref->px[0]));
+  ref->px[0] = (struct FNAME(pixel) *) calloc(1, ref->count * sizeof(*ref->px[0]));
   FTYPE vdiameter = 2.0 * FMPFRGET(img->radius, MPFR_RNDN);
   FTYPE hdiameter = img->width * vdiameter / img->height;
   #pragma omp parallel for
@@ -177,7 +177,7 @@ void FNAME(perturbator_start_internal)(struct perturbator *img) {
     FTYPE y = ((j + 0.5) / img->height - 0.5) * vdiameter;
     for (int i = 0; i < img->width; ++i) {
       FTYPE x = ((i + 0.5) / img->width - 0.5) * hdiameter;
-      complex FTYPE c = x - I * y;
+      std::complex<FTYPE> c(x, -y);
       int index = j * img->width + i;
       ref->px[0][index].c = c;
       ref->px[0][index].z = 0;
@@ -185,7 +185,7 @@ void FNAME(perturbator_start_internal)(struct perturbator *img) {
       ref->px[0][index].index = index;
     }
   }
-  img->threads = calloc(1, img->workers * sizeof(*img->threads));
+  img->threads = (pthread_t *) calloc(1, img->workers * sizeof(*img->threads));
   img->running = true;
   FNAME(image_enqueue)(img, ref);
   pthread_mutex_lock(&img->mutex);
@@ -207,7 +207,7 @@ void FNAME(release_refs)(struct perturbator *img) {
 }
 
 static void *FNAME(image_worker)(void *arg) {
-  struct perturbator *img = arg;
+  struct perturbator *img = (struct perturbator *) arg;
   image_log(img, LOG_QUEUE, "         ENTER\n");
 
   pthread_mutex_lock(&img->mutex);
@@ -235,12 +235,12 @@ static void *FNAME(image_worker)(void *arg) {
 
   pthread_mutex_unlock(&img->mutex);
 
-  mpc_t *z_hi = calloc(1, (1 + chunk) * sizeof(*z_hi));
+  mpc_t *z_hi = (mpc_t *) calloc(1, (1 + chunk) * sizeof(*z_hi));
   for (int k = 0; k <= chunk; ++k) {
     mpc_init2(z_hi[k], precision);
   }
-  complex FTYPE *z_d = calloc(1, (1 + chunk) * sizeof(*z_d));
-  FTYPE *z_size = calloc(1, (1 + chunk) * sizeof(*z_size));
+  std::complex<FTYPE> *z_d = (std::complex<FTYPE> *) calloc(1, (1 + chunk) * sizeof(*z_d));
+  FTYPE *z_size = (FTYPE *) calloc(1, (1 + chunk) * sizeof(*z_size));
 
   struct FNAME(reference) *ref = 0;
   while ( (ref = FNAME(image_dequeue)(img, ref)) ) {
@@ -258,7 +258,7 @@ static void *FNAME(image_worker)(void *arg) {
       }
       // compute rebase offset
       mpc_sub(ref->z, ref->parent_c, ref->c, MPC_RNDNN);
-      complex FTYPE dc = -FMPCGET(ref->z, MPC_RNDNN);
+      std::complex<FTYPE> dc = -FMPCGET(ref->z, MPC_RNDNN);
       mpc_set_ui_ui(ref->z, 0, 0, MPC_RNDNN);
       // rebase pixels to new reference
       int count = ref->count;
@@ -392,7 +392,7 @@ static void *FNAME(image_worker)(void *arg) {
       }
       mpc_set(ref->c, nucleus, MPC_RNDNN);
       mpc_sub(nucleus, ref->c, center, MPC_RNDNN);
-      complex FTYPE dc = -FMPCGET(nucleus, MPC_RNDNN);
+      std::complex<FTYPE> dc = -FMPCGET(nucleus, MPC_RNDNN);
       mpc_clear(nucleus);
       mpc_set_ui_ui(ref->z, 0, 0, MPC_RNDNN);
       ref->z_d_old = 0;
@@ -408,8 +408,8 @@ static void *FNAME(image_worker)(void *arg) {
           #pragma omp parallel for
           for (int k = 0; k < count; ++k) {
             ref->px[0][k].c += dc;
-            complex float z, dz;
-            z2c_approx_dof(approx, ref->px[0][k].c, &z, &dz);
+            std::complex<float> z, dz, c(ref->px[0][k].c);
+            z2c_approx_dof(approx, c, &z, &dz);
             ref->px[0][k].z = z;
             ref->px[0][k].dz = dz;
           }
@@ -420,8 +420,8 @@ static void *FNAME(image_worker)(void *arg) {
           #pragma omp parallel for
           for (int k = 0; k < count; ++k) {
             ref->px[0][k].c += dc;
-            complex double z, dz;
-            z2c_approx_do (approx, ref->px[0][k].c, &z, &dz);
+            std::complex<double> z, dz, c(ref->px[0][k].c);
+            z2c_approx_do (approx, c, &z, &dz);
             ref->px[0][k].z = z;
             ref->px[0][k].dz = dz;
           }
@@ -432,8 +432,8 @@ static void *FNAME(image_worker)(void *arg) {
           #pragma omp parallel for
           for (int k = 0; k < count; ++k) {
             ref->px[0][k].c += dc;
-            complex long double z, dz;
-            z2c_approx_dol(approx, ref->px[0][k].c, &z, &dz);
+            std::complex<long double> z, dz, c(ref->px[0][k].c);
+            z2c_approx_dol(approx, c, &z, &dz);
             ref->px[0][k].z = z;
             ref->px[0][k].dz = dz;
           }
@@ -449,8 +449,8 @@ static void *FNAME(image_worker)(void *arg) {
     } // if parent
 
     // prepare for output pixels
-    ref->px[1] = calloc(1, ref->count * sizeof(*ref->px[1]));
-    struct FNAME(pixel) *glitched = calloc(1, ref->count * sizeof(*glitched));
+    ref->px[1] = (struct FNAME(pixel) *) calloc(1, ref->count * sizeof(*ref->px[1]));
+    struct FNAME(pixel) *glitched = (struct FNAME(pixel) *) calloc(1, ref->count * sizeof(*glitched));
 //    int start_id = ref->start_id;
 
     for (int iters = ref->iters; iters < maxiters; iters += chunk) {
@@ -482,17 +482,17 @@ static void *FNAME(image_worker)(void *arg) {
         if (image_running(img)) {
 
           struct FNAME(pixel) *in = &ref->px[0][k];
-          complex FTYPE dz = in->dz;
-          complex FTYPE z = in->z;
-          complex FTYPE c = in->c;
-          complex FTYPE rz = z_d[0] + z;
+          std::complex<FTYPE> dz = in->dz;
+          std::complex<FTYPE> z = in->z;
+          std::complex<FTYPE> c = in->c;
+          std::complex<FTYPE> rz = z_d[0] + z;
           int index = in->index;
 
           bool active = true;
           for (int i = 1; i <= chunk; ++i) {
 
-            dz = 2 * rz * dz + 1;
-            z = 2 * z_d[i-1] * z + z * z + c;
+            dz = FNAME(2.0) * rz * dz + FNAME(1.0);
+            z = FNAME(2.0) * z_d[i-1] * z + z * z + c;
             rz = z_d[i] + z;
             FTYPE rz2 = FNAME(cnorm)(rz);
 
@@ -513,8 +513,8 @@ static void *FNAME(image_worker)(void *arg) {
               // escaped
               output[4 * index + 0] = iters + i;
               output[4 * index + 1] = 1 - log2(log(rz2) / log_escape_radius_2); // smooth iters
-              output[4 * index + 2] = carg(rz) / twopi;
-              output[4 * index + 3] = sqrt(rz2) * log(rz2) / FNAME(cabs)(dz * pixel_spacing); // de
+              output[4 * index + 2] = std::arg(rz) / twopi;
+              output[4 * index + 3] = sqrt(rz2) * log(rz2) / std::abs(dz * pixel_spacing); // de
               active = false;
               break;
             }
@@ -556,7 +556,7 @@ static void *FNAME(image_worker)(void *arg) {
 
           // enqueue a new reference
           int count = end - start;
-          struct FNAME(reference) *new_ref = calloc(1, sizeof(*new_ref));
+          struct FNAME(reference) *new_ref = (struct FNAME(reference) *) calloc(1, sizeof(*new_ref));
           // copy parent
           new_ref->has_parent = 1;
           mpc_init2(new_ref->parent_c, img->precision);
@@ -566,7 +566,7 @@ static void *FNAME(image_worker)(void *arg) {
           new_ref->period = start_iters;
           new_ref->iters = start_iters;
           // copy pixels
-          new_ref->px[0] = calloc(1, count * sizeof(*ref->px[0]));
+          new_ref->px[0] = (struct FNAME(pixel) *) calloc(1, count * sizeof(*ref->px[0]));
           memcpy(new_ref->px[0], glitched + start, count * sizeof(*ref->px[0]));
           new_ref->count = count;
           new_ref->index = min_ix - start;
@@ -577,9 +577,9 @@ static void *FNAME(image_worker)(void *arg) {
       if (active_count && active_count < ref->count) {
         free(ref->px[0]);
         ref->px[0] = ref->px[1];
-        ref->px[1] = calloc(1, active_count * sizeof(*ref->px[1]));
+        ref->px[1] = (struct FNAME(pixel) *) calloc(1, active_count * sizeof(*ref->px[1]));
         free(glitched);
-        glitched = calloc(1, active_count * sizeof(*glitched));
+        glitched = (struct FNAME(pixel) *) calloc(1, active_count * sizeof(*glitched));
       } else {
         struct FNAME(pixel) *tmp = ref->px[0];
         ref->px[0] = ref->px[1];
