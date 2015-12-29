@@ -276,7 +276,8 @@ extern int main(int argc, char **argv) {
   double escape_radius = envd("escaperadius", 25);
   double glitch_threshold = envd("glitchthreshold", 1e-6);
   int precision = envi("precision", 53);
-  int zoom = envi("zoom", 0);
+  int zoom_start = envi("zoom_start", 0);
+  int zoom_count = envi("zoom_count", 0);
   double weight = envd("weight", 0);
 
   mpfr_init2(state.radius, 53);
@@ -363,9 +364,10 @@ extern int main(int argc, char **argv) {
 
   glfwSetWindowUserPointer(window, &state);
 
-  if (zoom) {
+  if (zoom_count) {
     mpfr_set_d(state.radius, 256, MPFR_RNDN);
-    for (int z = 0; z < zoom; ++z) {
+    mpfr_div_2exp(state.radius, state.radius, zoom_start, MPFR_RNDN);
+    for (int z = zoom_start; z < zoom_count; ++z) {
       fprintf(stderr, "%8d FRAME\n", z);
       glfwPollEvents();
       if (glfwWindowShouldClose(window)) {
