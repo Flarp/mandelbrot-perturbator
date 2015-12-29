@@ -38,6 +38,12 @@ static int FNAME(cmp_pixel_by_iters_asc)(const void *a, const void *b) {
   const struct FNAME(pixel) *y = b;
   if (x->iters < y->iters) { return -1; }
   if (x->iters > y->iters) { return  1; }
+/*
+  FTYPE x2 = FNAME(cnorm)(x->z);
+  FTYPE y2 = FNAME(cnorm)(y->z);
+  if (x2 < y2) { return -1; }
+  if (x2 > y2) { return  1; }
+*/
   return 0;
 }
 
@@ -356,6 +362,24 @@ static void *FNAME(image_worker)(void *arg) {
         mpfr_clear(radius2);
       }
       if (! ok && image_running(img)) {
+        // reuse fallback
+        mpc_t delta;
+        mpc_init2(delta, 53);
+        mpfr_t delta2, radius2;
+        mpfr_init2(delta2, 53);
+        mpfr_init2(radius2, 53);
+        mpfr_sqr(radius2, radius, MPFR_RNDN);
+        mpc_sub(delta, last_reference, center, MPC_RNDNN);
+        mpc_norm(delta2, delta, MPFR_RNDN);
+        mpfr_add(delta2, delta2, radius2, MPFR_RNDN);
+        mpc_set(nucleus, last_reference, MPC_RNDNN);
+        period = last_period;
+        exponent = fmax(exponent, mpfr_get_exp(delta2) / 2);
+        ok = true;
+        reused = true;
+        mpc_clear(delta);
+        mpfr_clear(delta2);
+        mpfr_clear(radius2);
         image_log(img, LOG_CACHE, "         REUSE FALLBACK\n");
       }
 

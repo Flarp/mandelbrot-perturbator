@@ -125,7 +125,7 @@ extern int perturbator_active(struct perturbator *img) {
   }while(0)
 
 
-static struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, int exponent, mpc_t z, int *iter);
+struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, int exponent, mpc_t z, int *iter);
 
 // FIXME
 static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_t rnd) {
@@ -253,10 +253,10 @@ extern void perturbator_start(struct perturbator *img, const mpfr_t centerx, con
 
 
 extern void perturbator_stop(struct perturbator *img, int force) {
-  pthread_mutex_lock(&img->mutex);
   if (force) {
     img->running = false;
   }
+  pthread_mutex_lock(&img->mutex);
   pthread_cond_broadcast(&img->cond);
   pthread_mutex_unlock(&img->mutex);
   for (int i = 0; i < img->workers; ++i) {
@@ -271,7 +271,7 @@ extern void perturbator_stop(struct perturbator *img, int force) {
 }
 
 
-static void image_delete_cache(struct perturbator *img) {
+void image_delete_cache(struct perturbator *img) {
   if (img->series) {
     z2c_series_delete(img->series);
     img->series = 0;
@@ -289,7 +289,7 @@ static void image_delete_cache(struct perturbator *img) {
   }
 }
 
-static struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, int exponent, mpc_t z, int *iter) {
+struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, int exponent, mpc_t z, int *iter) {
   pthread_mutex_lock(&img->mutex);
   if (! reused) {
     image_delete_cache(img);
