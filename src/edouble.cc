@@ -1,3 +1,7 @@
+// perturbator -- efficient deep zooming for Mandelbrot sets
+// Copyright (C) 2015,2016 Claude Heiland-Allen
+// License GPL3+ http://www.gnu.org/licenses/gpl.html
+
 #ifndef EDOUBLE_CC
 #define EDOUBLE_CC 1
 
@@ -7,7 +11,7 @@
 
 #include <mpfr.h>
 
-double sign(double x) {
+inline double sign(double x) {
   return (x > 0) - (x < 0);
 }
 
@@ -20,9 +24,9 @@ private:
   double x;
   int e;
 public:
-  edouble() : x(0), e(0) { };
-  edouble(const edouble &that) : x(that.x), e(that.e) { };
-  edouble(const double &x0, const int &e0) {
+  inline edouble() : x(0), e(0) { };
+  inline edouble(const edouble &that) : x(that.x), e(that.e) { };
+  inline edouble(const double &x0, const int &e0) {
     if (x0 == 0 || std::isnan(x0) || std::isinf(x0)) {
       x = x0;
       e = 0;
@@ -42,130 +46,217 @@ public:
       }
     }
   };
-  edouble(const double &x) : edouble(x, 0) { };
-  edouble(const mpfr_t &a) {
+  inline edouble(const long double &x0, const int &e0) {
+    if (x0 == 0 || std::isnan(x0) || std::isinf(x0)) {
+      x = x0;
+      e = 0;
+    } else {
+      int e1(0);
+      long double x1(frexp(x0, &e1));
+      e1 += e0;
+      if (e0 > supexponent || e1 > maxexponent) {
+        x = sign(x0) / 0.0;
+        e = 0;
+      } else if (e0 < infexponent || e1 < minexponent) {
+        x = sign(x0) * 0.0;
+        e = 0;
+      } else {
+        x = x1;
+        e = e1;
+      }
+    }
+  };
+  inline edouble(const double &x) : edouble(x, 0) { };
+  inline edouble(const long double &x) : edouble(x, 0) { };
+  inline explicit edouble(const mpfr_t &a) {
     long e(0);
     double x(mpfr_get_d_2exp(&e, a, MPFR_RNDN));
     *this = edouble(x, e);
   }
-  ~edouble() { };
-  void to_mpfr(mpfr_t &m) {
+  inline edouble(const int &x) : edouble(double(x)) { };
+  inline ~edouble() { };
+  inline void to_mpfr(mpfr_t &m) {
     mpfr_set_d(m, x, MPFR_RNDN);
     mpfr_mul_2si(m, m, e, MPFR_RNDN);
   };
-  friend bool operator==(const edouble &a, const edouble &b);
-  friend bool operator!=(const edouble &a, const edouble &b);
-  friend int compare(const edouble &a, const edouble &b);
-  friend int sign(const edouble &a);
-  friend edouble abs(const edouble &a);
-  friend edouble operator+(const edouble &a, const edouble &b);
-  friend edouble operator-(const edouble &a);
-  friend edouble operator-(const edouble &a, const edouble &b);
-  friend edouble operator*(const edouble &a, const edouble &b);
-  friend edouble recip(const edouble &a);
-  friend edouble operator/(const edouble &a, const edouble &b);
-  friend bool isnan(const edouble &a);
-  friend bool isinf(const edouble &a);
-  friend std::ostream& operator<<(std::ostream& o, const edouble& a);
-  friend std::istream& operator>>(std::istream& i, edouble& a);
-  edouble &operator+=(const edouble &a) {
+  inline long double to_ld() {
+    return std::ldexp((long double) x, e);
+  }
+  friend inline bool operator==(const edouble &a, const edouble &b);
+  friend inline bool operator!=(const edouble &a, const edouble &b);
+  friend inline int compare(const edouble &a, const edouble &b);
+  friend inline int sign(const edouble &a);
+  friend inline edouble abs(const edouble &a);
+  friend inline edouble operator+(const edouble &a, const edouble &b);
+  friend inline edouble operator-(const edouble &a);
+  friend inline edouble operator-(const edouble &a, const edouble &b);
+  friend inline edouble operator*(const edouble &a, const edouble &b);
+  friend inline edouble recip(const edouble &a);
+  friend inline edouble operator/(const edouble &a, const edouble &b);
+  friend inline bool isnan(const edouble &a);
+  friend inline bool isinf(const edouble &a);
+  friend inline edouble ldexp(const edouble &a, int e);
+  friend inline std::ostream& operator<<(std::ostream& o, const edouble& a);
+  friend inline std::istream& operator>>(std::istream& i, edouble& a);
+  inline edouble &operator+=(const edouble &a) {
     *this = *this + a;
     return *this;
   };
-  edouble &operator-=(const edouble &a) {
+  inline edouble &operator-=(const edouble &a) {
     *this = *this - a;
     return *this;
   };
-  edouble &operator*=(const edouble &a) {
+  inline edouble &operator*=(const edouble &a) {
     *this = *this * a;
     return *this;
   };
-  edouble &operator/=(const edouble &a) {
+  inline edouble &operator/=(const edouble &a) {
     *this = *this / a;
     return *this;
   };
 };
 
-bool operator==(const edouble &a, const edouble &b) {
+inline bool operator==(const edouble &a, const edouble &b) {
   return a.e == b.e && a.x == b.x;
 }
 
-bool operator!=(const edouble &a, const edouble &b) {
+inline bool operator!=(const edouble &a, const edouble &b) {
   return a.e != b.e || a.x != b.x;
 }
 
-int compare(const edouble &a, const edouble &b) {
+inline int compare(const double &a, const double &b) {
+  return sign(a - b);
+}
+
+inline int compare(const edouble &a, const edouble &b) {
   int e(std::max(a.e, b.e));
   return compare(ldexp(a.x, a.e - e), ldexp(b.x, b.e - e));
 }
 
-bool operator<(const edouble &a, const edouble &b) {
+inline bool operator<(const edouble &a, const edouble &b) {
   return compare(a, b) < 0;
 }
 
-bool operator<=(const edouble &a, const edouble &b) {
+inline bool operator<=(const edouble &a, const edouble &b) {
   return compare(a, b) <= 0;
 }
 
-bool operator>(const edouble &a, const edouble &b) {
+inline bool operator>(const edouble &a, const edouble &b) {
   return compare(a, b) > 0;
 }
 
-bool operator>=(const edouble &a, const edouble &b) {
+inline bool operator>=(const edouble &a, const edouble &b) {
   return compare(a, b) >= 0;
 }
 
-int sign(const edouble &a) {
+inline int sign(const edouble &a) {
   return sign(a.x);
 }
 
-edouble abs(const edouble &a) {
+inline edouble abs(const edouble &a) {
   return { std::abs(a.x), a.e };
 }
 
-edouble operator+(const edouble &a, const edouble &b) {
+inline edouble operator+(const edouble &a, const edouble &b) {
   int e(std::max(a.e, b.e));
   return edouble(ldexp(a.x, a.e - e) + ldexp(b.x, b.e - e), e);
 }
 
-edouble operator-(const edouble &a) {
+inline edouble operator-(const edouble &a) {
   return { -a.x, a.e };
 }
 
-edouble operator-(const edouble &a, const edouble &b) {
+inline edouble operator-(const edouble &a, const edouble &b) {
   int e(std::max(a.e, b.e));
   return edouble(ldexp(a.x, a.e - e) - ldexp(b.x, b.e - e), e);
 }
 
-edouble operator*(const edouble &a, const edouble &b) {
+inline edouble operator*(const edouble &a, const edouble &b) {
   return edouble(a.x * b.x, a.e + b.e);
 }
 
-double recip(const double &a) {
+inline double recip(const double &a) {
   return 1.0 / a;
 }
 
-edouble recip(const edouble &a) {
+inline edouble recip(const edouble &a) {
   return edouble(recip(a.x), -a.e);
 }
 
-edouble operator/(const edouble &a, const edouble &b) {
+inline edouble operator/(const edouble &a, const edouble &b) {
   return edouble(a.x / b.x, a.e - b.e);
 }
 
-bool isnan(const edouble &a) {
+inline bool isnan(const edouble &a) {
   return isnan(a.x);
 }
 
-bool isinf(const edouble &a) {
+inline bool isinf(const edouble &a) {
   return isinf(a.x);
 }
 
-std::ostream& operator<<(std::ostream& o, const edouble& a) {
+inline edouble ldexp(const edouble &a, int e) {
+  return edouble(a.x, a.e + e);
+}
+
+inline void to_mpfr(float from, mpfr_t &to) {
+  mpfr_set_flt(to, from, MPFR_RNDN);
+}
+
+inline void to_mpfr(double from, mpfr_t &to) {
+  mpfr_set_d(to, from, MPFR_RNDN);
+}
+
+inline void to_mpfr(long double from, mpfr_t &to) {
+  mpfr_set_ld(to, from, MPFR_RNDN);
+}
+
+inline void to_mpfr(edouble from, mpfr_t &to) {
+  from.to_mpfr(to);
+}
+
+inline long double to_ld(float x) {
+  return x;
+}
+
+inline long double to_ld(double x) {
+  return x;
+}
+
+inline long double to_ld(long double x) {
+  return x;
+}
+
+inline long double to_ld(edouble x) {
+  return x.to_ld();
+}
+
+template <typename S, typename T>
+inline T to_R(S x, const T &dummy) {
+  (void) dummy;
+  return T(to_ld(x));
+}
+
+inline edouble to_R(edouble x, const edouble &dummy) {
+  (void) dummy;
+  return x;
+}
+
+template <typename S, typename T>
+inline std::complex<T> to_C(std::complex<S> x, const T &dummy) {
+  return std::complex<T>(to_R(std::real(x), dummy), to_R(std::imag(x), dummy));
+}
+
+inline std::complex<edouble> to_C(std::complex<edouble> x, const edouble &dummy) {
+  (void) dummy;
+  return x;
+}
+
+inline std::ostream& operator<<(std::ostream& o, const edouble& a) {
   return o << a.x << " " << a.e;
 }
 
-std::istream& operator>>(std::istream& i, edouble& a) {
+inline std::istream& operator>>(std::istream& i, edouble& a) {
   double x;
   int e;
   i >> x >> e;

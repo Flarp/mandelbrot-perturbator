@@ -1,5 +1,5 @@
 // perturbator -- efficient deep zooming for Mandelbrot sets
-// Copyright (C) 2015 Claude Heiland-Allen
+// Copyright (C) 2015,2016 Claude Heiland-Allen
 // License GPL3+ http://www.gnu.org/licenses/gpl.html
 
 #include <assert.h>
@@ -14,6 +14,9 @@
 #include <pthread.h>
 
 #include "perturbator.h"
+
+#include "edouble.cc"
+
 #include "generated/z2c.h"
 
 extern "C" {
@@ -25,19 +28,18 @@ extern "C" {
 #include "m_r_domain_size.c"
 }
 
-static inline int max(int a, int b) {
-  return a > b ? a : b;
-}
-
 enum float_type
   { ft_float
   , ft_double
   , ft_long_double
+  , ft_edouble
   };
 
+// don't use float, derivative overflows too easily...
 //#define EXP_THRESHOLD_FLOAT -120
-#define EXP_THRESHOLD_DOUBLE -1016
-#define EXP_THRESHOLD_LONG_DOUBLE -16376
+#define EXP_THRESHOLD_DOUBLE -960
+#define EXP_THRESHOLD_LONG_DOUBLE -16300
+#define EXP_THRESHOLD_EDOUBLE -(1<<29)
 
 struct series_node {
   struct series_node *next;
@@ -46,16 +48,16 @@ struct series_node {
   mpc_t z;
   enum float_type ft;
   union {
-    struct z2c_approxf *approxf;
-    struct z2c_approx  *approx;
-    struct z2c_approxl *approxl;
+    struct z2c_approx<float> *approxf;
+    struct z2c_approx<double>  *approx;
+    struct z2c_approx<long double> *approxl;
+    struct z2c_approx<edouble> *approxe;
   } u;
 };
 
 
-struct referencef;
+template <typename R>
 struct reference;
-struct referencel;
 
 struct perturbator {
   int workers;
@@ -95,11 +97,7 @@ struct perturbator {
   int volatile start_id;
 
   enum float_type ft;
-  union {
-    struct referencef *volatile refsf;
-    struct reference  *volatile refs;
-    struct referencel *volatile refsl;
-  } urefs;
+  void *volatile refs;
 
 };
 
@@ -130,68 +128,84 @@ extern int perturbator_active(struct perturbator *img) {
 
 struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, int exponent, mpc_t z, int *iter);
 
-// FIXME
-static void mpfr_add_ld(mpfr_t rop, const mpfr_t op1, long double op2, mpfr_rnd_t rnd) {
-  mpfr_t tmp;
-  mpfr_init2(tmp, 64);
-  mpfr_set_ld(tmp, op2, rnd);
-  mpfr_add(rop, op1, tmp, rnd);
-  mpfr_clear(tmp);
+
+float mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, float dummy) {
+  (void) dummy;
+  return mpfr_get_flt(op, rnd);
 }
 
-#define FT ft_float
-#define FTYPE float
-#define FNAME(x) x ## f
-#define FMPFRGET mpfr_get_flt
-#define FMPFRADD mpfr_add_d
-#define FMPCGET mpc_get_fltc
-#define FMPCADD mpc_add_fltc
-#define FMPCDIV mpc_div_fltc2
-#include "core_native.c"
-#undef FTYPE
-#undef FNAME
-#undef FMPFRGET
-#undef FMPFRADD
-#undef FMPCGET
-#undef FMPCADD
-#undef FMPCDIV
-#undef FT
+double mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, double dummy) {
+  (void) dummy;
+  return mpfr_get_d(op, rnd);
+}
 
-#define FT ft_double
-#define FTYPE double
-#define FNAME(x) x
-#define FMPFRGET mpfr_get_d
-#define FMPFRADD mpfr_add_d
-#define FMPCGET mpc_get_dc2
-#define FMPCADD mpc_add_dc
-#define FMPCDIV mpc_div_dc2
-#include "core_native.c"
-#undef FTYPE
-#undef FNAME
-#undef FMPFRGET
-#undef FMPFRADD
-#undef FMPCGET
-#undef FMPCADD
-#undef FMPCDIV
-#undef FT
+long double mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, long double dummy) {
+  (void) dummy;
+  return mpfr_get_ld(op, rnd);
+}
 
-#define FT ft_long_double
-#define FTYPE long double
-#define FNAME(x) x ## l
-#define FMPFRGET mpfr_get_ld
-#define FMPFRADD mpfr_add_ld
-#define FMPCGET mpc_get_ldc2
-#define FMPCADD mpc_add_ldc2
-#define FMPCDIV mpc_div_ldc2
+edouble mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, edouble dummy) {
+  (void) dummy;
+  (void) rnd;
+  return edouble(op);
+}
+
+int mpfr_add(mpfr_t &rop, const mpfr_t &op1, float op2, mpfr_rnd_t rnd) {
+  return mpfr_add_d(rop, op1, op2, rnd);
+}
+
+int mpfr_add(mpfr_t &rop, const mpfr_t &op1, double op2, mpfr_rnd_t rnd) {
+  return mpfr_add_d(rop, op1, op2, rnd);
+}
+
+int mpfr_add(mpfr_t &rop, const mpfr_t &op1, long double op2, mpfr_rnd_t rnd) {
+  mpfr_t tmp;
+  mpfr_init2(tmp, 64);
+  to_mpfr(op2, tmp);
+  int r = mpfr_add(rop, op1, tmp, rnd);
+  mpfr_clear(tmp);
+  return r;
+}
+
+int mpfr_add(mpfr_t &rop, const mpfr_t &op1, edouble op2, mpfr_rnd_t rnd) {
+  mpfr_t tmp;
+  mpfr_init2(tmp, 53);
+  to_mpfr(op2, tmp);
+  int r = mpfr_add(rop, op1, tmp, rnd);
+  mpfr_clear(tmp);
+  return r;
+}
+
+template <typename T>
+void to_mpc(const std::complex<T> &from, mpc_t &to) {
+  to_mpfr(std::real(from), mpc_realref(to));
+  to_mpfr(std::imag(from), mpc_imagref(to));
+}
+
+template <typename T>
+int mpc_add(mpc_t &rop, const mpc_t &op1, const std::complex<T> &op2, mpc_rnd_t rnd) {
+  (void) rnd;
+          mpfr_add(mpc_realref(rop), mpc_realref(op1), std::real(op2), MPFR_RNDN);
+  return  mpfr_add(mpc_imagref(rop), mpc_imagref(op1), std::imag(op2), MPFR_RNDN);
+}
+
+template <typename T>
+int mpc_div(mpc_t &rop, const mpc_t &op1, const std::complex<T> &op2, mpc_rnd_t rnd) {
+  mpc_t tmp;
+  mpc_init2(tmp, 64);
+  to_mpc(op2, tmp);
+  int r = mpc_div(rop, op1, tmp, rnd);
+  mpc_clear(tmp);
+  return r;
+}
+
+template <typename T>
+std::complex<T> mpc_get(const mpc_t &op, mpc_rnd_t rnd, T dummy) {
+  (void) rnd;
+  return std::complex<T>(mpfr_get(mpc_realref(op), MPFR_RNDN, dummy), mpfr_get(mpc_imagref(op), MPFR_RNDN, dummy));
+}
+
 #include "core_native.c"
-#undef FTYPE
-#undef FNAME
-#undef FMPFRGET
-#undef FMPFRADD
-#undef FMPCGET
-#undef FMPCADD
-#undef FMPCDIV
-#undef FT
 
 extern struct perturbator *perturbator_new(int workers, int width, int height, int maxiters, int chunk, double escape_radius, double glitch_threshold) {
   struct perturbator *img = (struct perturbator *) calloc(1, sizeof(*img));
@@ -235,7 +249,7 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
 
 extern void perturbator_start(struct perturbator *img, const mpfr_t centerx, const mpfr_t centery, const mpfr_t radius) {
 
-  img->precision = max(53, 53 - 2 * mpfr_get_exp(radius));
+  img->precision = max(53, int(53 - 2 * mpfr_get_exp(radius)));
 
   image_log(img, LOG_VIEW, "real=%Re\nimag=%Re\nradius=%Re\nprecision=%d\n", centerx, centery, radius, img->precision);
 
@@ -245,11 +259,16 @@ extern void perturbator_start(struct perturbator *img, const mpfr_t centerx, con
 
   memset(img->output, 0, img->width * img->height * 4 * sizeof(*img->output));
 
-  img->ft = mpfr_get_exp(radius) >= EXP_THRESHOLD_DOUBLE ? ft_double : ft_long_double;
+  int e = mpfr_get_exp(radius);
+  img->ft =
+    e >= EXP_THRESHOLD_DOUBLE ? ft_double :
+    e >= EXP_THRESHOLD_LONG_DOUBLE ? ft_long_double :
+    ft_edouble;
   switch (img->ft) {
-    case ft_float:        perturbator_start_internalf(img); return;
-    case ft_double:       perturbator_start_internal (img); return;
-    case ft_long_double:  perturbator_start_internall(img); return;
+    case ft_float:        perturbator_start_internal<float>(img); return;
+    case ft_double:       perturbator_start_internal<double>(img); return;
+    case ft_long_double:  perturbator_start_internal<long double>(img); return;
+    case ft_edouble:      perturbator_start_internal<edouble>(img); return;
   }
   assert(! "valid float type");
 }
@@ -266,9 +285,10 @@ extern void perturbator_stop(struct perturbator *img, int force) {
     pthread_join(img->threads[i], 0);
   }
   switch (img->ft) {
-    case ft_float:        release_refsf(img); return;
-    case ft_double:       release_refs (img); return;
-    case ft_long_double:  release_refsl(img); return;
+    case ft_float:        release_refs<float>(img); return;
+    case ft_double:       release_refs<double>(img); return;
+    case ft_long_double:  release_refs<long double>(img); return;
+    case ft_edouble:      release_refs<edouble>(img); return;
   }
   assert(! "valid float type");
 }
@@ -283,9 +303,10 @@ void image_delete_cache(struct perturbator *img) {
     struct series_node *next = img->nodes->next;
     mpc_clear(img->nodes->z);
     switch (img->nodes->ft) {
-      case ft_float:       z2c_approx_deletef(img->nodes->u.approxf); break;
-      case ft_double:      z2c_approx_delete (img->nodes->u.approx ); break;
-      case ft_long_double: z2c_approx_deletel(img->nodes->u.approxl); break;
+      case ft_float:       z2c_approx_delete(img->nodes->u.approxf); break;
+      case ft_double:      z2c_approx_delete(img->nodes->u.approx ); break;
+      case ft_long_double: z2c_approx_delete(img->nodes->u.approxl); break;
+      case ft_edouble:     z2c_approx_delete(img->nodes->u.approxe); break;
       default: assert(! "valid float type");
     }
     img->nodes = next;
@@ -325,15 +346,19 @@ struct series_node *image_cached_approx(struct perturbator *img, bool reused, co
         struct z2c_reference *reference = z2c_series_reference_new(img->series);
         z2c_reference_get_zr(reference, mpc_realref(node->z), mpc_imagref(node->z));
         z2c_reference_delete(reference);
+        // don't use float, derivative overflows too easily...
         /*if (e >= EXP_THRESHOLD_FLOAT) {
           node->ft = ft_float;
           node->u.approxf = z2c_series_approx_newf(img->series, e);
         } else*/ if (e >= EXP_THRESHOLD_DOUBLE) {
           node->ft = ft_double;
-          node->u.approx  = z2c_series_approx_new (img->series, e);
+          node->u.approx  = z2c_series_approx_new(img->series, e, double(0));
         } else if (e >= EXP_THRESHOLD_LONG_DOUBLE) {
           node->ft = ft_long_double;
-          node->u.approxl = z2c_series_approx_newl(img->series, e);
+          node->u.approxl = z2c_series_approx_new(img->series, e, (long double)(0));
+        } else if (e >= EXP_THRESHOLD_EDOUBLE) {
+          node->ft = ft_edouble;
+          node->u.approxe = z2c_series_approx_new(img->series, e, edouble(0));
         } else {
           assert(! "exponent in range of supported types");
         }
