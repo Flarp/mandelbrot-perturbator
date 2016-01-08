@@ -9,6 +9,7 @@ License GPL3+ http://www.gnu.org/licenses/gpl.html
 quickstart
 ----------
 
+    sudo apt-get install ghc libghc-mtl-dev
     git clone http://code.mathr.co.uk/mandelbrot-numerics.git
     git clone http://code.mathr.co.uk/mandelbrot-perturbator.git
     cd mandelbrot-perturbator

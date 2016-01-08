@@ -7,7 +7,7 @@
 
 import Control.Monad (forM_, unless)
 import Control.Monad.Trans.RWS (put, get, tell, execRWS, RWS)
-import Data.Either (lefts, rights, isRight)
+import Data.Either (lefts, rights)
 import qualified Data.Foldable as F
 import Data.Function (on)
 import Data.List (group, groupBy, sort, sortBy, intercalate, partition)
@@ -20,6 +20,11 @@ import qualified Data.Set as S
 
 --import Debug.Trace (traceShow)
 --debug x = traceShow x x
+
+-- not in ghc-7.6
+isRight :: Either a b -> Bool
+isRight (Right _) = True
+isRight _ = False
 
 -- new in ghc-7.10
 sortOn :: Ord o => (a -> o) -> [a] -> [a]
