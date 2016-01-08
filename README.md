@@ -2,7 +2,7 @@ perturbator
 ===========
 
 efficient deep zooming for Mandelbrot sets
-Copyright (C) 2015 Claude Heiland-Allen
+Copyright (C) 2015,2016 Claude Heiland-Allen
 License GPL3+ http://www.gnu.org/licenses/gpl.html
 
 
@@ -10,11 +10,11 @@ quickstart
 ----------
 
     git clone mandelbrot-numerics
-    git clone perturbator
-    cd perturbator
-    make -C src
-    make -C examples
-    ./examples/perturbator-glfw3
+    git clone mandelbrot-perturbator
+    cd mandelbrot-perturbator
+    make -C lib
+    make -C bin
+    ./bin/perturbator-glfw3
 
 
 rendering methods
@@ -25,6 +25,7 @@ different rendering methods used for different depths:
     kind    number maxdepth   
     plain   f32    1e-7
     plain   f64    1e-15
+    plain   f80    1e-??
     perturb f32    1e-38
     perturb f64    1e-308
     perturb f80    1e-4932

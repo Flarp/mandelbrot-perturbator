@@ -11,10 +11,10 @@ core.o: core.c core_native.c generated/z2c.h perturbator.h edouble.cc
 generated/z2c.o: generated/z2c.h edouble.cc
 	make -C generated
 
-generated/z2c.h: perturbator
+generated/z2c.h: generator
 	-rm -r generated
 	mkdir generated
-	cd generated && ../perturbator
+	cd generated && ../generator
 
-perturbator: perturbator.hs
-	ghc -O2 perturbator.hs
+generator: generator.hs
+	ghc -O2 generator.hs

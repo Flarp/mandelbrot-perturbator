@@ -1,6 +1,6 @@
-examples/perturbator-glfw3
-src/perturbator
-src/generated
+bin/perturbator-glfw3
+lib/generator
+lib/generated
 *.a
 *.o
 *.hi
