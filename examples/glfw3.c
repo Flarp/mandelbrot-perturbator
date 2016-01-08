@@ -52,7 +52,7 @@ static int envr(mpfr_t out, const char *name, const char *def) {
 }
 
 static const char *simple_vert =
-  "#version 150 core\n"
+  "#version 130\n"
   "out vec2 texCoord;\n"
   "const vec2 t[4] = vec2[4](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(1.0, 1.0));\n"
   "void main() {\n"
@@ -62,7 +62,7 @@ static const char *simple_vert =
   ;
 
 static const char *simple_frag =
-  "#version 150 core\n"
+  "#version 130\n"
   "uniform sampler2D tex;\n"
   "uniform bool show_lines;\n"
   "uniform float weight;\n"
@@ -264,6 +264,75 @@ static void handle_view_morph(struct perturbator *context, state_t *state) {
   }
 }
 
+void debug_program(GLuint program, const char *name) {
+  if (program) {
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+      fprintf(stderr, "%s: OpenGL shader program link failed\n", name);
+    }
+    GLint length = 0;
+    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+    char *buffer = (char *) malloc(length + 1);
+    glGetProgramInfoLog(program, length, NULL, buffer);
+    buffer[length] = 0;
+    if (buffer[0]) {
+      fprintf(stderr, "%s: OpenGL shader program info log\n", name);
+      fprintf(stderr, "%s\n", buffer);
+    }
+    free(buffer);
+  } else {
+    fprintf(stderr, "%s: OpenGL shader program creation failed\n", name);
+  }
+}
+
+void debug_shader(GLuint shader, GLenum type, const char *name) {
+  const char *tname = 0;
+  switch (type) {
+    case GL_VERTEX_SHADER:   tname = "vertex";   break;
+    case GL_GEOMETRY_SHADER: tname = "geometry"; break;
+    case GL_FRAGMENT_SHADER: tname = "fragment"; break;
+    default:                 tname = "unknown";  break;
+  }
+  if (shader) {
+    GLint compiled = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled != GL_TRUE) {
+      fprintf(stderr, "%s: OpenGL %s shader compile failed\n", name, tname);
+    }
+    GLint length = 0;
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+    char *buffer = (char *) malloc(length + 1);
+    glGetShaderInfoLog(shader, length, NULL, buffer);
+    buffer[length] = 0;
+    if (buffer[0]) {
+      fprintf(stderr, "%s: OpenGL %s shader info log\n", name, tname);
+      fprintf(stderr, "%s\n", buffer);
+    }
+    free(buffer);
+  } else {
+    fprintf(stderr, "%s: OpenGL %s shader creation failed\n", name, tname);
+  }
+}
+
+void compile_shader(GLint program, GLenum type, const char *name, const GLchar *source) {
+  GLuint shader = glCreateShader(type);
+  glShaderSource(shader, 1, &source, NULL);
+  glCompileShader(shader);
+  debug_shader(shader, type, name);
+  glAttachShader(program, shader);
+  glDeleteShader(shader);
+}
+
+GLint compile_program(const char *name, const GLchar *vert, const GLchar *frag) {
+  GLint program = glCreateProgram();
+  if (vert) { compile_shader(program, GL_VERTEX_SHADER  , name, vert); }
+  if (frag) { compile_shader(program, GL_FRAGMENT_SHADER, name, frag); }
+  glLinkProgram(program);
+  debug_program(program, name);
+  return program;
+}
+
 extern int main(int argc, char **argv) {
   state_t state;
   memset(&state, 0, sizeof(state));
@@ -318,31 +387,7 @@ extern int main(int argc, char **argv) {
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  GLuint program = glCreateProgram();
-  {
-    GLuint shader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(shader, 1, &simple_vert, 0);
-    glCompileShader(shader);
-    glAttachShader(program, shader);
-    glDeleteShader(shader);
-  }
-  {
-    GLuint shader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(shader, 1, &simple_frag, 0);
-    glCompileShader(shader);
-    glAttachShader(program, shader);
-    glDeleteShader(shader);
-  }
-  glLinkProgram(program);
-  {
-    char buf[10000];
-    int len = 0;
-    glGetProgramInfoLog(program, 10000, &len, buf);
-    if (len > 0) {
-      buf[len] = 0;
-      fprintf(stderr, "%s\n", buf);
-    }
-  }
+  GLuint program = compile_program("colourize", simple_vert, simple_frag);
   glUseProgram(program);
   state.show_lines_u = glGetUniformLocation(program, "show_lines");
   state.weight_u = glGetUniformLocation(program, "weight");

@@ -9,6 +9,9 @@ License GPL3+ http://www.gnu.org/licenses/gpl.html
 quickstart
 ----------
 
+    git clone mandelbrot-numerics
+    git clone perturbator
+    cd perturbator
     make -C src
     make -C examples
     ./examples/perturbator-glfw3
@@ -24,14 +27,14 @@ different rendering methods used for different depths:
     plain   f64    1e-15
     perturb f32    1e-38
     perturb f64    1e-308
-    perturb f80    1e-9864
+    perturb f80    1e-4932
     perturb f??i16 1e-9864
     perturb f??i32 1e-646456993
     perturb f??i64 1e-2776511644261678080
 
 implemented so far:
 
-    perturb f64 "z^2 + c" with order 24 series approximation
+    perturb f64/f80/f64i32 "z^2 + c" with order 24 series approximation
 
 
 future api

@@ -16,7 +16,6 @@ phase 3
 * generate more formulas
 
 phase 4
-* implement f??i16,32,64
 * implement plain, benchmark vs perturbed
 * gtk3 example program
 
