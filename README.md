@@ -9,8 +9,8 @@ License GPL3+ http://www.gnu.org/licenses/gpl.html
 quickstart
 ----------
 
-    git clone mandelbrot-numerics
-    git clone mandelbrot-perturbator
+    git clone http://code.mathr.co.uk/mandelbrot-numerics.git
+    git clone http://code.mathr.co.uk/mandelbrot-perturbator.git
     cd mandelbrot-perturbator
     make -C lib
     make -C bin
