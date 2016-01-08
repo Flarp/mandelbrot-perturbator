@@ -87,6 +87,7 @@ public:
   friend inline int compare(const edouble &a, const edouble &b);
   friend inline int sign(const edouble &a);
   friend inline edouble abs(const edouble &a);
+  friend inline edouble sqrt(const edouble &a);
   friend inline edouble operator+(const edouble &a, const edouble &b);
   friend inline edouble operator-(const edouble &a);
   friend inline edouble operator-(const edouble &a, const edouble &b);
@@ -155,6 +156,10 @@ inline int sign(const edouble &a) {
 
 inline edouble abs(const edouble &a) {
   return { std::abs(a.x), a.e };
+}
+
+inline edouble sqrt(const edouble &a) {
+  return { std::sqrt((a.e & 1) ? 2.0 * a.x : a.x), a.e / 2 };
 }
 
 inline edouble operator+(const edouble &a, const edouble &b) {

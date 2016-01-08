@@ -715,7 +715,7 @@ static void *image_worker(void *arg) {
               output[4 * index + 0] = iters + i;
               output[4 * index + 1] = 1 - log2(log(to_ld(rz2)) / to_ld(log_escape_radius_2)); // smooth iters
               output[4 * index + 2] = std::arg(std::complex<long double>(to_ld(std::real(rz)), to_ld(std::imag(rz)))) / twopi;
-              output[4 * index + 3] = sqrt(to_ld(rz2)) * log(to_ld(rz2)) / sqrt(to_ld(std::norm(dz * pixel_spacing))); // de
+              output[4 * index + 3] = sqrt(to_ld(rz2)) * log(to_ld(rz2)) / to_ld(sqrt(std::norm(dz * pixel_spacing))); // de
               active = false;
               break;
             }
