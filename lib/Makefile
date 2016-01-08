@@ -18,3 +18,7 @@ generated/z2c.h: generator
 
 generator: generator.hs
 	ghc -O2 generator.hs
+
+.PHONY: clean
+clean:
+	-rm -r generated generator generator.hi generator.o libperturbator.a perturbator.o
