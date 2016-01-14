@@ -17,22 +17,23 @@ inline double sign(double x) {
 
 class edouble {
 private:
-  static const int maxexponent = (1 << 30) - 2;
-  static const int minexponent = 2 - (1 << 30);
-  static const int supexponent = maxexponent - 2000;
-  static const int infexponent = minexponent + 2080;
+  static const long maxexponent = (1L << 60) - 2;
+  static const long minexponent = 2 - (1L << 60);
+  static const long supexponent = maxexponent - 2000;
+  static const long infexponent = minexponent + 2080;
   double x;
-  int e;
+  long e;
 public:
   inline edouble() : x(0), e(0) { };
   inline edouble(const edouble &that) : x(that.x), e(that.e) { };
-  inline edouble(const double &x0, const int &e0) {
+  inline edouble(const double &x0, const long &e0) {
     if (x0 == 0 || std::isnan(x0) || std::isinf(x0)) {
       x = x0;
       e = 0;
     } else {
-      int e1(0);
-      double x1(frexp(x0, &e1));
+      int tmp(0);
+      double x1(std::frexp(x0, &tmp));
+      long e1(tmp);
       e1 += e0;
       if (e0 > supexponent || e1 > maxexponent) {
         x = sign(x0) / 0.0;
@@ -46,13 +47,14 @@ public:
       }
     }
   };
-  inline edouble(const long double &x0, const int &e0) {
+  inline edouble(const long double &x0, const long &e0) {
     if (x0 == 0 || std::isnan(x0) || std::isinf(x0)) {
       x = x0;
       e = 0;
     } else {
-      int e1(0);
-      long double x1(frexp(x0, &e1));
+      int tmp(0);
+      long double x1(frexp(x0, &tmp));
+      long e1(tmp);
       e1 += e0;
       if (e0 > supexponent || e1 > maxexponent) {
         x = sign(x0) / 0.0;
@@ -80,7 +82,14 @@ public:
     mpfr_mul_2si(m, m, e, MPFR_RNDN);
   };
   inline long double to_ld() {
-    return std::ldexp((long double) x, e);
+    int tmp(e);
+    if (e > long(tmp)) {
+      return sign(x) / 0.0;
+    }
+    if (e < long(tmp)) {
+      return sign(x) * 0.0;
+    }
+    return std::ldexp((long double) x, tmp);
   }
   friend inline bool operator==(const edouble &a, const edouble &b);
   friend inline bool operator!=(const edouble &a, const edouble &b);
@@ -96,7 +105,7 @@ public:
   friend inline edouble operator/(const edouble &a, const edouble &b);
   friend inline bool isnan(const edouble &a);
   friend inline bool isinf(const edouble &a);
-  friend inline edouble ldexp(const edouble &a, int e);
+  friend inline edouble ldexp(const edouble &a, long e);
   friend inline std::ostream& operator<<(std::ostream& o, const edouble& a);
   friend inline std::istream& operator>>(std::istream& i, edouble& a);
   inline edouble &operator+=(const edouble &a) {
@@ -130,8 +139,26 @@ inline int compare(const double &a, const double &b) {
 }
 
 inline int compare(const edouble &a, const edouble &b) {
-  int e(std::max(a.e, b.e));
-  return compare(ldexp(a.x, a.e - e), ldexp(b.x, b.e - e));
+  if (a.x == 0.0) {
+    return -sign(b.x);
+  }
+  if (b.x == 0.0) {
+    return sign(a.x);
+  }
+  long e(std::max(a.e, b.e));
+  long da(a.e - e);
+  long db(b.e - e);
+  int ia(da);
+  int ib(db);
+  if (long(ia) != da) {
+    // a -> 0
+    return -sign(b.x);
+  }
+  if (long(ib) != db) {
+    // b -> 0
+    return sign(a.x);
+  }
+  return compare(std::ldexp(a.x, ia), std::ldexp(b.x, ib));
 }
 
 inline bool operator<(const edouble &a, const edouble &b) {
@@ -159,12 +186,30 @@ inline edouble abs(const edouble &a) {
 }
 
 inline edouble sqrt(const edouble &a) {
-  return { std::sqrt((a.e & 1) ? 2.0 * a.x : a.x), a.e / 2 };
+  return { std::sqrt((a.e & 1) ? 2.0 * a.x : a.x), (a.e & 1) ? (a.e - 1) / 2 : a.e / 2 };
 }
 
 inline edouble operator+(const edouble &a, const edouble &b) {
-  int e(std::max(a.e, b.e));
-  return edouble(ldexp(a.x, a.e - e) + ldexp(b.x, b.e - e), e);
+  if (a.x == 0.0) {
+    return b;
+  }
+  if (b.x == 0.0) {
+    return a;
+  }
+  long e(std::max(a.e, b.e));
+  long da(a.e - e);
+  long db(b.e - e);
+  int ia(da);
+  int ib(db);
+  if (long(ia) != da) {
+    // a -> 0
+    return b;
+  }
+  if (long(ib) != db) {
+    // b -> 0
+    return a;
+  }
+  return edouble(std::ldexp(a.x, ia) + std::ldexp(b.x, ib), e);
 }
 
 inline edouble operator-(const edouble &a) {
@@ -172,8 +217,26 @@ inline edouble operator-(const edouble &a) {
 }
 
 inline edouble operator-(const edouble &a, const edouble &b) {
-  int e(std::max(a.e, b.e));
-  return edouble(ldexp(a.x, a.e - e) - ldexp(b.x, b.e - e), e);
+  if (a.x == 0.0) {
+    return -b;
+  }
+  if (b.x == 0.0) {
+    return a;
+  }
+  long e(std::max(a.e, b.e));
+  long da(a.e - e);
+  long db(b.e - e);
+  int ia(da);
+  int ib(db);
+  if (long(ia) != da) {
+    // a -> 0
+    return -b;
+  }
+  if (long(ib) != db) {
+    // b -> 0
+    return a;
+  }
+  return edouble(std::ldexp(a.x, ia) - std::ldexp(b.x, ib), e);
 }
 
 inline edouble operator*(const edouble &a, const edouble &b) {
@@ -200,7 +263,7 @@ inline bool isinf(const edouble &a) {
   return isinf(a.x);
 }
 
-inline edouble ldexp(const edouble &a, int e) {
+inline edouble ldexp(const edouble &a, long e) {
   return edouble(a.x, a.e + e);
 }
 
@@ -263,7 +326,7 @@ inline std::ostream& operator<<(std::ostream& o, const edouble& a) {
 
 inline std::istream& operator>>(std::istream& i, edouble& a) {
   double x;
-  int e;
+  long e;
   i >> x >> e;
   a = edouble(x, e);
   return i;

@@ -36,7 +36,7 @@ different rendering methods used for different depths:
 
 implemented so far:
 
-    perturb f64/f80/f64i32 "z^2 + c" with order 24 series approximation
+    perturb f64/f80/f64i64 "z^2 + c" with order 24 series approximation
 
 
 future api
