@@ -553,8 +553,8 @@ codegen order fname ps =
   \  mpfr_exp_t de0;\n\
   \  mpfr_exp_t de1;\n\
   \  for (int i = 0; i < " ++ show order ++ "; ++i) {\n\
-  \    e1 = INT_MIN;\n\
-  \    de1 = INT_MIN;\n\
+  \    e1 = LONG_MIN;\n\
+  \    de1 = LONG_MIN;\n\
   \    for (int j = 0; j < 2; ++j) {\n\
   \      if (! mpfr_zero_p(s->v[" ++ stem ++ "_series_spec.v[i][j]])) {\n\
   \        e1 = std::max(e1, mpfr_get_exp(s->v[" ++ stem ++ "_series_spec.v[i][j]]));\n\

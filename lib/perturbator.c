@@ -39,11 +39,11 @@ enum float_type
 //#define EXP_THRESHOLD_FLOAT -120
 #define EXP_THRESHOLD_DOUBLE -960
 #define EXP_THRESHOLD_LONG_DOUBLE -16300
-#define EXP_THRESHOLD_EDOUBLE -(1<<29)
+#define EXP_THRESHOLD_EDOUBLE -(1L<<62)
 
 struct series_node {
   struct series_node *next;
-  int exponent;
+  long exponent;
   int iters;
   mpc_t z;
   enum float_type ft;
@@ -75,7 +75,7 @@ struct perturbator {
   int newton_steps_root;
   int newton_steps_child;
   int order;
-  int threshold;
+  long threshold;
   int logging;
 
   // cache
@@ -126,7 +126,7 @@ extern int perturbator_active(struct perturbator *img) {
   }while(0)
 
 
-struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, int exponent, mpc_t z, int *iter);
+struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, long exponent, mpc_t z, int *iter);
 
 
 float mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, float dummy) {
@@ -457,7 +457,7 @@ static void *image_worker(void *arg) {
 
     } else {
 
-      int exponent = mpfr_get_exp(radius);
+      long exponent = mpfr_get_exp(radius);
       // find an appropriate initial reference
       bool ok = false;
       bool reused = false;
@@ -480,7 +480,7 @@ static void *image_worker(void *arg) {
           mpc_set(nucleus, last_reference, MPC_RNDNN);
           period = last_period;
           if (! mpfr_zero_p(delta2)) {
-            exponent = max(exponent, int(mpfr_get_exp(delta2) / 2));
+            exponent = max(exponent, mpfr_get_exp(delta2) / 2);
           }
           ok = true;
           reused = true;
@@ -563,7 +563,7 @@ static void *image_worker(void *arg) {
         mpfr_add(delta2, delta2, radius2, MPFR_RNDN);
         mpc_set(nucleus, last_reference, MPC_RNDNN);
         period = last_period;
-        exponent = max(exponent, int(mpfr_get_exp(delta2) / 2));
+        exponent = max(exponent, mpfr_get_exp(delta2) / 2);
         ok = true;
         reused = true;
         mpc_clear(delta);
@@ -858,7 +858,7 @@ extern void perturbator_start(struct perturbator *img, const mpfr_t centerx, con
 
   memset(img->output, 0, img->width * img->height * 4 * sizeof(*img->output));
 
-  int e = mpfr_get_exp(radius);
+  long e = mpfr_get_exp(radius);
   img->ft =
     e >= EXP_THRESHOLD_DOUBLE ? ft_double :
     e >= EXP_THRESHOLD_LONG_DOUBLE ? ft_long_double :
@@ -912,7 +912,7 @@ void image_delete_cache(struct perturbator *img) {
   }
 }
 
-struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, int exponent, mpc_t z, int *iter) {
+struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, long exponent, mpc_t z, int *iter) {
   pthread_mutex_lock(&img->mutex);
   if (! reused) {
     image_delete_cache(img);
@@ -920,12 +920,12 @@ struct series_node *image_cached_approx(struct perturbator *img, bool reused, co
   if (! img->series) {
     img->series = z2c_series_new(img->order, mpc_realref(c), mpc_imagref(c));
   }
-  int exponent0 = 16;
+  long exponent0 = 16;
   if (img->nodes)  {
     exponent0 = img->nodes->exponent;
   }
   // cache all the things
-  for (int e = exponent0; e >= exponent; --e) {
+  for (long e = exponent0; e >= exponent; --e) {
     while (z2c_series_step(img->series, e + 2, img->threshold)) {
 //      if (! image_running(img)) {
 //        return 0;
