@@ -16,7 +16,7 @@ import qualified Data.Map as M
 import Data.Monoid (Monoid, (<>))
 import Data.Set (Set)
 import qualified Data.Set as S
-
+import System.IO (hFlush, stdout)
 
 --import Debug.Trace (traceShow)
 --debug x = traceShow x x
@@ -1181,4 +1181,4 @@ main'' stem n f = codegen n stem . zip [0..] . splitAdds . compact . inplace . r
       $ f
 
 main :: IO ()
-main = mapM_ (uncurry writeFile) . main' "z2c" [4,6,8,12,16,24{-,32,48,64-}] $ Z^(2::Int) + C
+main = mapM_ (\(f, s) -> writeFile f s >> print f >> hFlush stdout) . main' "z2c" [4,6,8,12,16,24,32,48,64] $ Z^(2::Int) + C
