@@ -67,14 +67,15 @@ instance Diff E where
   diff e = error $ "diff: " ++ show e
 
 instance Simplify E where
-  simplify (Sum []) = 0
-  simplify (Sum [e]) = simplify e
-  simplify (Sum es) = case sortBy sumCmp (map simplify es) of
-    N 0 : gs -> simplify $ Sum gs
-    N i : N j : gs -> simplify $ Sum (N (i + j) : gs)
-    Sum fs : gs -> simplify $ Sum (fs ++ gs)
-    gs -> Sum gs
+  simplify (Sum es) = simplifySum (sortBy sumCmp (map simplify es))
     where
+      simplifySum ss = case ss of
+        [] -> 0
+        [e] -> e
+        N 0 : gs -> simplifySum $ gs
+        N i : N j : gs -> simplifySum $ (N (i + j) : gs)
+        Sum fs : gs -> simplify $ Sum (fs ++ gs)
+        gs -> Sum gs
       sumCmp (Sum a) (Sum b) = compare a b
       sumCmp (Sum _) _ = LT
       sumCmp _ (Sum _) = GT
@@ -82,16 +83,17 @@ instance Simplify E where
       sumCmp (N _) _ = LT
       sumCmp _ (N _) = GT
       sumCmp a b = compare a b
-  simplify (Product []) = 1
-  simplify (Product [e]) = simplify e
-  simplify (Product es) = case sortBy prodCmp (map simplify es) of
-    N 0 : _ -> 0
-    N 1 : gs -> simplify $ Product gs
-    N i : N j : gs -> simplify $ Product (N (i * j) : gs)
-    Sum fs : gs -> simplify $ Sum [ Product (f : gs) | f <- fs ]
-    Product fs : gs -> simplify $ Product (fs ++ gs)
-    gs -> Product gs
+  simplify (Product es) = simplifyProduct (sortBy prodCmp (map simplify es))
     where
+      simplifyProduct ss = case ss of
+        [] -> 1
+        [e] -> e
+        N 0 : _ -> 0
+        N 1 : gs -> simplifyProduct $ gs
+        N i : N j : gs -> simplifyProduct $ (N (i * j) : gs)
+        Sum fs : gs -> simplify $ Sum [ Product (f : gs) | f <- fs ]
+        Product fs : gs -> simplify $ Product (fs ++ gs)
+        gs -> Product gs
       prodCmp (Product a) (Product b) = compare a b
       prodCmp (Product _) _ = LT
       prodCmp _ (Product _) = GT
@@ -162,14 +164,15 @@ instance Num CE where
   negate e = CProduct [CN (-1), e]
 
 instance Simplify CE where
-  simplify (CSum []) = 0
-  simplify (CSum [e]) = simplify e
-  simplify (CSum es) = case sortBy sumCmp (map simplify es) of
-    CN 0 : gs -> simplify $ CSum gs
-    CN i : CN j : gs -> simplify $ CSum (CN (i + j) : gs)
-    CSum fs : gs -> simplify $ CSum (fs ++ gs)
-    gs -> CSum gs
+  simplify (CSum es) = simplifySum (sortBy sumCmp (map simplify es))
     where
+      simplifySum ss = case ss of
+        [] -> 0
+        [e] -> e
+        CN 0 : gs -> simplifySum $ gs
+        CN i : CN j : gs -> simplifySum $ (CN (i + j) : gs)
+        CSum fs : gs -> simplify $ CSum (fs ++ gs)
+        gs -> CSum gs
       sumCmp (CSum a) (CSum b) = compare a b
       sumCmp (CSum _) _ = LT
       sumCmp _ (CSum _) = GT
@@ -177,20 +180,21 @@ instance Simplify CE where
       sumCmp (CN _) _ = LT
       sumCmp _ (CN _) = GT
       sumCmp a b = compare a b
-  simplify (CProduct []) = 1
-  simplify (CProduct [e]) = simplify e
-  simplify (CProduct es) = case sortBy prodCmp (map simplify es) of
-    I : I : gs -> simplify $ CProduct (CN (-1) : gs)
-    I : gs -> case simplify (CProduct gs) of
-      CProduct hs -> CProduct (I : hs)
-      h -> CProduct [I, h]
-    CN 0 : _ -> 0
-    CN 1 : gs -> simplify $ CProduct gs
-    CN i : CN j : gs -> simplify $ CProduct (CN (i * j) : gs)
-    CSum fs : gs -> simplify $ CSum [ CProduct (f : gs) | f <- fs ]
-    CProduct fs : gs -> simplify $ CProduct (fs ++ gs)
-    gs -> CProduct gs
+  simplify (CProduct es) = simplifyProduct (sortBy prodCmp (map simplify es))
     where
+      simplifyProduct ss = case ss of
+        [] -> 1
+        [e] -> e
+        I : I : gs -> simplifyProduct $ (CN (-1) : gs)
+        I : gs -> case simplifyProduct gs of
+          CProduct hs -> CProduct (I : hs)
+          h -> CProduct [I, h]
+        CN 0 : _ -> 0
+        CN 1 : gs -> simplifyProduct $ gs
+        CN i : CN j : gs -> simplifyProduct $ (CN (i * j) : gs)
+        CSum fs : gs -> simplify $ CSum [ CProduct (f : gs) | f <- fs ]
+        CProduct fs : gs -> simplify $ CProduct (fs ++ gs)
+        gs -> CProduct gs
       prodCmp (CProduct a) (CProduct b) = compare a b
       prodCmp (CProduct _) _ = LT
       prodCmp _ (CProduct _) = GT
