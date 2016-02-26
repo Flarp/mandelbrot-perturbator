@@ -827,7 +827,7 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
   img->newton_steps_root = 64;
   img->newton_steps_child = 8;
 
-  img->order = 24;
+  img->order = 64;
   img->threshold = 64;
   img->logging = -1;
 
