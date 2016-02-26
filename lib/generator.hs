@@ -459,7 +459,7 @@ renames phases renamings = map f phases
     g (res, args) = (h res, map h args)
     h (Right r) = case filter (S.member r) rens of
       [] -> Right r
-      [s] -> Right (F.minimum s) -- F. not needed with ghc-7.10
+      [s] -> Right (S.findMin s)
       ss -> error $ "renames: " ++ show ss
     h l = l
 
