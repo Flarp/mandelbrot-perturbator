@@ -11,8 +11,8 @@ import Data.Either (lefts, rights)
 import qualified Data.Foldable as F
 import Data.Function (on)
 import Data.List (group, groupBy, sort, sortBy, intercalate, partition)
-import Data.Map (Map)
-import qualified Data.Map as M
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import Data.Monoid (Monoid, (<>))
 import Data.Set (Set)
 import qualified Data.Set as S
