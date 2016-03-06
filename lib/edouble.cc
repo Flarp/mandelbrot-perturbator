@@ -77,6 +77,7 @@ public:
   }
   inline edouble(const int &x) : edouble(double(x)) { };
   inline ~edouble() { };
+  inline long exponent() { return e; } const;
   inline void to_mpfr(mpfr_t &m) {
     mpfr_set_d(m, x, MPFR_RNDN);
     mpfr_mul_2si(m, m, e, MPFR_RNDN);
