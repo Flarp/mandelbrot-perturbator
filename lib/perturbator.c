@@ -17,7 +17,28 @@
 
 #include "edouble.cc"
 
-#include "generated/z2c.h"
+float mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, float dummy) {
+  (void) dummy;
+  return mpfr_get_flt(op, rnd);
+}
+
+double mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, double dummy) {
+  (void) dummy;
+  return mpfr_get_d(op, rnd);
+}
+
+long double mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, long double dummy) {
+  (void) dummy;
+  return mpfr_get_ld(op, rnd);
+}
+
+edouble mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, edouble dummy) {
+  (void) dummy;
+  (void) rnd;
+  return edouble(op);
+}
+
+#include "z2c.c"
 
 extern "C" {
   using namespace std;
@@ -46,13 +67,7 @@ struct series_node {
   long exponent;
   int iters;
   mpc_t z;
-  enum float_type ft;
-  union {
-    struct z2c_approx<float> *approxf;
-    struct z2c_approx<double>  *approx;
-    struct z2c_approx<long double> *approxl;
-    struct z2c_approx<edouble> *approxe;
-  } u;
+  struct z2c_approx *approx;
 };
 
 
@@ -128,27 +143,6 @@ extern int perturbator_active(struct perturbator *img) {
 
 struct series_node *image_cached_approx(struct perturbator *img, bool reused, const mpc_t c, long exponent, mpc_t z, int *iter);
 
-
-float mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, float dummy) {
-  (void) dummy;
-  return mpfr_get_flt(op, rnd);
-}
-
-double mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, double dummy) {
-  (void) dummy;
-  return mpfr_get_d(op, rnd);
-}
-
-long double mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, long double dummy) {
-  (void) dummy;
-  return mpfr_get_ld(op, rnd);
-}
-
-edouble mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, edouble dummy) {
-  (void) dummy;
-  (void) rnd;
-  return edouble(op);
-}
 
 int mpfr_add(mpfr_t &rop, const mpfr_t &op1, float op2, mpfr_rnd_t rnd) {
   return mpfr_add_d(rop, op1, op2, rnd);
@@ -591,58 +585,14 @@ static void *image_worker(void *arg) {
 
       // rebase pixels to new reference with approximation
       int count = ref->count;
-      switch (snode->ft) {
-        case ft_float: {
-          struct z2c_approx<float> *approx = snode->u.approxf;
-          #pragma omp parallel for
-          for (int k = 0; k < count; ++k) {
-            ref->px[0][k].c += dc;
-            std::complex<float> z, dz, c(float(to_ld(std::real(ref->px[0][k].c))), float(to_ld(std::imag(ref->px[0][k].c))));
-            z2c_approx_do(approx, c, &z, &dz);
-            ref->px[0][k].z = z;
-            ref->px[0][k].dz = dz;
-          }
-          break;
-        }
-        case ft_double: {
-          struct z2c_approx<double> *approx = snode->u.approx;
-          #pragma omp parallel for
-          for (int k = 0; k < count; ++k) {
-            ref->px[0][k].c += dc;
-            std::complex<double> z, dz, c(double(to_ld(std::real(ref->px[0][k].c))), double(to_ld(std::imag(ref->px[0][k].c))));
-            z2c_approx_do(approx, c, &z, &dz);
-            ref->px[0][k].z = z;
-            ref->px[0][k].dz = dz;
-          }
-          break;
-        }
-        case ft_long_double: {
-          struct z2c_approx<long double> *approx = snode->u.approxl;
-          #pragma omp parallel for
-          for (int k = 0; k < count; ++k) {
-            ref->px[0][k].c += dc;
-            std::complex<long double> z, dz, c((long double)(to_ld(std::real(ref->px[0][k].c))), (long double)(to_ld(std::imag(ref->px[0][k].c))));
-            z2c_approx_do(approx, c, &z, &dz);
-            ref->px[0][k].z = z;
-            ref->px[0][k].dz = dz;
-          }
-          break;
-        }
-        case ft_edouble: {
-          struct z2c_approx<edouble> *approx = snode->u.approxe;
-          #pragma omp parallel for
-          for (int k = 0; k < count; ++k) {
-            ref->px[0][k].c += dc;
-            std::complex<edouble> z, dz, c(edouble(std::real(ref->px[0][k].c)), edouble(std::imag(ref->px[0][k].c)));
-            z2c_approx_do(approx, c, &z, &dz);
-            ref->px[0][k].z = to_C(z, R(0));
-            ref->px[0][k].dz = to_C(dz, R(0));
-          }
-          break;
-        }
-        default: {
-          assert(! "valid float type");
-        }
+      struct z2c_approx *approx = snode->approx;
+      #pragma omp parallel for
+      for (int k = 0; k < count; ++k) {
+        ref->px[0][k].c += dc;
+        std::complex<edouble> z, dz, c(edouble(std::real(ref->px[0][k].c)), edouble(std::imag(ref->px[0][k].c)));
+        z2c_approx_do(approx, c, &z, &dz);
+        ref->px[0][k].z = to_C(z, R(0));
+        ref->px[0][k].dz = to_C(dz, R(0));
       }
 
       image_log(img, LOG_CACHE, "         APPROX         %8d\n", ref->iters);
@@ -827,7 +777,7 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
   img->newton_steps_root = 64;
   img->newton_steps_child = 8;
 
-  img->order = 64;
+  img->order = 256;
   img->threshold = 64;
   img->logging = -1;
 
@@ -901,13 +851,7 @@ void image_delete_cache(struct perturbator *img) {
   while (img->nodes) {
     struct series_node *next = img->nodes->next;
     mpc_clear(img->nodes->z);
-    switch (img->nodes->ft) {
-      case ft_float:       z2c_approx_delete(img->nodes->u.approxf); break;
-      case ft_double:      z2c_approx_delete(img->nodes->u.approx ); break;
-      case ft_long_double: z2c_approx_delete(img->nodes->u.approxl); break;
-      case ft_edouble:     z2c_approx_delete(img->nodes->u.approxe); break;
-      default: assert(! "valid float type");
-    }
+    z2c_approx_delete(img->nodes->approx);
     img->nodes = next;
   }
 }
@@ -945,22 +889,7 @@ struct series_node *image_cached_approx(struct perturbator *img, bool reused, co
         struct z2c_reference *reference = z2c_series_reference_new(img->series);
         z2c_reference_get_zr(reference, mpc_realref(node->z), mpc_imagref(node->z));
         z2c_reference_delete(reference);
-        // don't use float, derivative overflows too easily...
-        /*if (e >= EXP_THRESHOLD_FLOAT) {
-          node->ft = ft_float;
-          node->u.approxf = z2c_series_approx_newf(img->series, e);
-        } else*/ if (e >= EXP_THRESHOLD_DOUBLE) {
-          node->ft = ft_double;
-          node->u.approx  = z2c_series_approx_new(img->series, e, double(0));
-        } else if (e >= EXP_THRESHOLD_LONG_DOUBLE) {
-          node->ft = ft_long_double;
-          node->u.approxl = z2c_series_approx_new(img->series, e, (long double)(0));
-        } else if (e >= EXP_THRESHOLD_EDOUBLE) {
-          node->ft = ft_edouble;
-          node->u.approxe = z2c_series_approx_new(img->series, e, edouble(0));
-        } else {
-          assert(! "exponent in range of supported types");
-        }
+        node->approx = z2c_approx_new(img->series);
         img->nodes = node;
       }
     }
