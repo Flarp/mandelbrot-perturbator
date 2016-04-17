@@ -188,9 +188,7 @@ bool z2c_series_step(struct z2c_series *s, mpfr_exp_t exponent, mpfr_exp_t thres
   std::complex<edouble> z(mpfr_get(s->v[2], MPFR_RNDN, edouble(0)), mpfr_get(s->v[3], MPFR_RNDN, edouble(0)));
   std::complex<edouble> dz(mpfr_get(s->v[4], MPFR_RNDN, edouble(0)), mpfr_get(s->v[5], MPFR_RNDN, edouble(0)));
   edouble two(2);
-#if 0
   #pragma omp parallel for
-#endif
   for (int i = 0; i < s->order/2; ++i) {
     // load balancing
     int ns[2] = { i + 1, s->order - i };
@@ -202,21 +200,19 @@ bool z2c_series_step(struct z2c_series *s, mpfr_exp_t exponent, mpfr_exp_t thres
       } else {
         // a(n) <- 2 z a(n) + sum a(m) a(n-m)
         std::complex<edouble> sum(0);
-        for (int m = 1; m < n; ++m) {
-          sum += s->a[0][m-1] * s->a[0][n-m - 1];
+        for (int m = 1; m < (n+1)/2; ++m) {
+          sum += s->a[0][m - 1] * s->a[0][n-m - 1];
         }
-/*
         sum *= two;
         if (0 == (n & 1)) {
-          sum -= s->a[0][n/2] * s->a[0][n/2];
+          sum += s->a[0][n/2 - 1] * s->a[0][n/2 - 1];
         }
-*/
         s->a[1][n-1] = two * z * s->a[0][n-1] + sum;
       }
       // b(n) <- 2 (z b(n) + dz a(n) + sum a(m) b(n-m) )
       std::complex<edouble> sum(0);
       for (int m = 1; m < n; ++m) {
-        sum += s->a[0][m-1] * s->b[0][n-m - 1];
+        sum += s->a[0][m - 1] * s->b[0][n-m - 1];
       }
       s->b[1][n-1] = two * (z * s->b[0][n-1] + dz * s->a[0][n-1] + sum);
     }
