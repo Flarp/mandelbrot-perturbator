@@ -14,9 +14,12 @@
 #include <time.h>
 
 #include <mpfr.h>
+#include <mpc.h>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+
+#include <mandelbrot-numerics.h>
 
 #include "perturbator.h"
 
@@ -203,7 +206,7 @@ static void key_handler(GLFWwindow *window, int key, int scancode, int action, i
       case GLFW_KEY_ESCAPE:
         glfwSetWindowShouldClose(window, GL_TRUE);
         break;
-      case GLFW_KEY_M:
+      case GLFW_KEY_J:
         state->should_view_morph = true;
         break;
       case GLFW_KEY_L:
@@ -242,24 +245,35 @@ static void refresh_callback(void *user_pointer) {
 static void handle_view_morph(struct perturbator *context, state_t *state) {
   if (state->should_view_morph) {
     state->should_view_morph = false;
-    mpfr_t x, y, r;
-    mpfr_init2(x, 53);
-    mpfr_init2(y, 53);
-    perturbator_get_primary_reference(context, x, y);
+    mpc_t nucleus, size;
+    mpc_init2(nucleus, 53);
+    mpc_init2(size, 53);
+    int period = perturbator_get_primary_reference(context, mpc_realref(nucleus), mpc_imagref(nucleus));
+    m_r_size(size, nucleus, period);
+    mpfr_t r, r2;
     mpfr_init2(r, 53);
+    mpfr_init2(r2, 53);
+    mpc_abs(r, size, MPFR_RNDN);
+    mpfr_sqrt(r2, r, MPFR_RNDN);
+    mpfr_mul(r, r, r2, MPFR_RNDN);
+    mpfr_sqrt(r, r, MPFR_RNDN);
+    mpfr_mul_2si(r, r, 3, MPFR_RNDN);
+/*
     mpfr_set(r, state->radius, MPFR_RNDN);
     int e = mpfr_get_exp(r);
     mpfr_mul_2si(r, r, e / 2, MPFR_RNDN);
+*/
     int p = max(53, 53 - mpfr_get_exp(r));
     state->precision = p;
     mpfr_set_prec(state->centerx, p);
     mpfr_set_prec(state->centery, p);
-    mpfr_set(state->centerx, x, MPFR_RNDN);
-    mpfr_set(state->centery, y, MPFR_RNDN);
+    mpfr_set(state->centerx, mpc_realref(nucleus), MPFR_RNDN);
+    mpfr_set(state->centery, mpc_imagref(nucleus), MPFR_RNDN);
     mpfr_set(state->radius, r, MPFR_RNDN);
     state->should_restart = true;
-    mpfr_clear(x);
-    mpfr_clear(y);
+    mpc_clear(nucleus);
+    mpc_clear(size);
+    mpfr_clear(r2);
     mpfr_clear(r);
   }
 }
