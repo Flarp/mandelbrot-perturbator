@@ -165,7 +165,7 @@ int z2c_series_get_n(const struct z2c_series *s) {
   return s->n;
 }
 
-bool z2c_series_step(struct z2c_series *s, mpfr_exp_t exponent, mpfr_exp_t threshold) {
+bool z2c_series_step(struct z2c_series *s, mpfr_exp_t exponent, mpfr_exp_t threshold, int approx_skip) {
   // 6,7 <- z^2 + c
   mpfr_sqr(s->v[6], s->v[2], MPFR_RNDN);
   mpfr_sqr(s->v[7], s->v[3], MPFR_RNDN);
@@ -239,6 +239,9 @@ bool z2c_series_step(struct z2c_series *s, mpfr_exp_t exponent, mpfr_exp_t thres
       e0 = e1;
       de0 = de1;
     }
+  }
+  if (approx_skip) {
+    valid = dvalid = s->n < approx_skip;
   }
   if ((! valid) || (! dvalid)) { return false; }
   // step

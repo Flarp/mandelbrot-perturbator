@@ -79,6 +79,7 @@ struct perturbator {
   int width;
   int height;
   int detect_glitches;
+  int approx_skip;
   int maxiters;
   double escape_radius;
   double glitch_threshold;
@@ -873,7 +874,7 @@ struct series_node *image_cached_approx(struct perturbator *img, bool reused, co
   }
   // cache all the things
   for (long e = exponent0; e >= exponent; --e) {
-    while (z2c_series_step(img->series, e + 2, img->threshold)) {
+    while (z2c_series_step(img->series, e + 2, img->threshold, img->approx_skip)) {
 //      if (! image_running(img)) {
 //        return 0;
 //      }
@@ -928,4 +929,8 @@ int perturbator_get_primary_reference(struct perturbator *img, mpfr_t x, mpfr_t 
 
 void perturbator_set_detect_glitches(struct perturbator *img, int detect_glitches) {
   img->detect_glitches = detect_glitches;
+}
+
+void perturbator_set_approx_skip(struct perturbator *img, int approx_skip) {
+  img->approx_skip = approx_skip;
 }
