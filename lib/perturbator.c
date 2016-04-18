@@ -78,6 +78,7 @@ struct perturbator {
   int workers;
   int width;
   int height;
+  int detect_glitches;
   int maxiters;
   double escape_radius;
   double glitch_threshold;
@@ -395,6 +396,7 @@ static void *image_worker(void *arg) {
 
   pthread_mutex_lock(&img->mutex);
 
+  int detect_glitches = img->detect_glitches;
   int maxiters = img->maxiters;
   R escape_radius_2 = img->escape_radius_2;
   R log_escape_radius_2 = img->log_escape_radius_2;
@@ -647,7 +649,7 @@ static void *image_worker(void *arg) {
             rz = z_d[i] + z;
             R rz2 = std::norm(rz);
 
-            if (rz2 < z_size[i]) {
+            if (detect_glitches && rz2 < z_size[i]) {
               // glitched
               int my_glitch_count;
               #pragma omp atomic capture
@@ -762,6 +764,7 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
   img->workers = workers;
   img->width = width;
   img->height = height;
+  img->detect_glitches = 1;
   img->maxiters = maxiters;
   img->chunk = chunk;
   img->escape_radius = escape_radius;
@@ -777,7 +780,7 @@ extern struct perturbator *perturbator_new(int workers, int width, int height, i
   img->newton_steps_root = 64;
   img->newton_steps_child = 8;
 
-  img->order = 256;
+  img->order = 16;
   img->threshold = 64;
   img->logging = -1;
 
@@ -921,4 +924,8 @@ int perturbator_get_primary_reference(struct perturbator *img, mpfr_t x, mpfr_t 
   mpfr_set(y, mpc_imagref(img->last_reference), MPFR_RNDN);
   pthread_mutex_unlock(&img->mutex);
   return period;
+}
+
+void perturbator_set_detect_glitches(struct perturbator *img, int detect_glitches) {
+  img->detect_glitches = detect_glitches;
 }

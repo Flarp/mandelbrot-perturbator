@@ -18,6 +18,7 @@ void perturbator_stop(struct perturbator *context, int force);
 int perturbator_active(struct perturbator *context);
 const float *perturbator_get_output(struct perturbator *context);
 int perturbator_get_primary_reference(struct perturbator *context, mpfr_t x, mpfr_t y);
+void perturbator_set_detect_glitches(struct perturbator *img, int detect_glitches);
 
 #ifdef __cplusplus
 }

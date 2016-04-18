@@ -354,6 +354,7 @@ extern int main(int argc, char **argv) {
   int workers = envi("threads", 4);
   int width = envi("width", 1280);
   int height = envi("height", 720);
+  int detect_glitches = envi("detect_glitches", 1);
   int maxiters = envi("maxiters", 1 << 18);
   int chunk = envi("chunk", 1 << 8);
   double escape_radius = envd("escaperadius", 25);
@@ -420,6 +421,7 @@ extern int main(int argc, char **argv) {
   state.log2weight = weight;
 
   struct perturbator *context = perturbator_new(workers, width, height, maxiters, chunk, escape_radius, glitch_threshold);
+  perturbator_set_detect_glitches(context, detect_glitches);
 
   glfwSetWindowUserPointer(window, &state);
 
