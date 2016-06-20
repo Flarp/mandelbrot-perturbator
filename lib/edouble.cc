@@ -333,6 +333,44 @@ inline std::istream& operator>>(std::istream& i, edouble& a) {
   return i;
 }
 
+long exponent(float z)
+{
+  int e;
+  frexp(z, &e);
+  return e;
+}
+
+long exponent(double z)
+{
+  int e;
+  frexp(z, &e);
+  return e;
+}
+
+long exponent(long double z)
+{
+  int e;
+  frexp(z, &e);
+  return e;
+}
+
+long exponent(edouble z)
+{
+  return z.exponent();
+}
+
+long exponent(const mpfr_t z)
+{
+  if (mpfr_regular_p(z))
+    return mpfr_get_exp(z);
+  return 0;
+}
+
+bool isfinite(edouble z)
+{
+  return !(isinf(z) || isnan(z));
+}
+
 #ifdef EDOUBLE_STANDALONE
 
 int main() {
