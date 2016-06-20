@@ -38,6 +38,19 @@ edouble mpfr_get(const mpfr_t &op, mpfr_rnd_t rnd, edouble dummy) {
   return edouble(op);
 }
 
+template< typename R >
+bool isfinite(const std::complex< R > &z)
+{
+  return isfinite(real(z)) && isfinite(imag(z));
+}
+
+enum float_type
+  { ft_float
+  , ft_double
+  , ft_long_double
+  , ft_edouble
+  };
+
 #include "z2c.c"
 
 extern "C" {
@@ -48,13 +61,6 @@ extern "C" {
 #include "m_r_box_period.c"
 #include "m_r_domain_size.c"
 }
-
-enum float_type
-  { ft_float
-  , ft_double
-  , ft_long_double
-  , ft_edouble
-  };
 
 // don't use float, derivative overflows too easily...
 //#define EXP_THRESHOLD_FLOAT -120
@@ -866,7 +872,7 @@ struct series_node *image_cached_approx(struct perturbator *img, bool reused, co
     image_delete_cache(img);
   }
   if (! img->series) {
-    img->series = z2c_series_new(img->order, mpc_realref(c), mpc_imagref(c));
+    img->series = z2c_series_new(img->order, mpc_realref(c), mpc_imagref(c), ft_edouble);
   }
   long exponent0 = 16;
   if (img->nodes)  {
