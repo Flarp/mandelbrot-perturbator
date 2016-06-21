@@ -592,16 +592,91 @@ static void *image_worker(void *arg) {
       struct series_node *snode = image_cached_approx(img, reused, ref->c, exponent, ref->z, &ref->iters);
       ref->z_d = mpc_get(ref->z, MPC_RNDNN, R(0));
 
+      image_log(img, LOG_CACHE, "         SERIES         %8d\n", ref->iters);
+
       // rebase pixels to new reference with approximation
       int count = ref->count;
       struct z2c_approx *approx = snode->approx;
-      #pragma omp parallel for
-      for (int k = 0; k < count; ++k) {
-        ref->px[0][k].c += dc;
-        std::complex<edouble> z, dz, c(edouble(std::real(ref->px[0][k].c)), edouble(std::imag(ref->px[0][k].c)));
-        z2c_approx_do(approx, c, &z, &dz);
-        ref->px[0][k].z = to_C(z, R(0));
-        ref->px[0][k].dz = to_C(dz, R(0));
+      // compile approx for speed boost
+      {
+        int o = approx->u.e->order;
+        switch (img->ft) {
+          case ft_double:
+          {
+            long e = exponent;//(pixel_spacing);
+            std::complex<double> *a = (std::complex<double> *) malloc((2 * o + 1) * sizeof(*a));
+            for (int i = 0; i < o; ++i) {
+              edouble re = ldexp(real(approx->u.e->a[i]), e * (i + 1));
+              edouble im = ldexp(imag(approx->u.e->a[i]), e * (i + 1));
+              a[i] = std::complex<double>(to_ld(re), to_ld(im));
+            }
+            for (int i = 0; i <= o; ++i) {
+              edouble re = ldexp(real(approx->u.e->b[i]), e * i);
+              edouble im = ldexp(imag(approx->u.e->b[i]), e * i);
+              a[i+o] = std::complex<double>(to_ld(re), to_ld(im));
+            }
+            #pragma omp parallel for
+            for (int k = 0; k < count; ++k) {
+              ref->px[0][k].c += dc;
+              std::complex<double> z(0), dz(a[o]), c(std::ldexp(double(to_ld(std::real(ref->px[0][k].c))), -e), std::ldexp(double(to_ld(std::imag(ref->px[0][k].c))), -e));
+              std::complex<double> cn(c);
+              for (int i = 0; i < o; ++i) {
+                z += a[i] * cn;
+                dz += a[i+o+1] * cn;
+                cn *= c;
+              }
+              ref->px[0][k].z = z;
+              ref->px[0][k].dz = dz;
+            }
+            break;
+          }
+          case ft_long_double:
+          {
+            long e = exponent;//(pixel_spacing);
+            std::complex<long double> *a = (std::complex<long double> *) malloc((2 * o + 1) * sizeof(*a));
+            for (int i = 0; i < o; ++i) {
+              edouble re = ldexp(real(approx->u.e->a[i]), e * (i + 1));
+              edouble im = ldexp(imag(approx->u.e->a[i]), e * (i + 1));
+              a[i] = std::complex<long double>(to_ld(re), to_ld(im));
+            }
+            for (int i = 0; i <= o; ++i) {
+              edouble re = ldexp(real(approx->u.e->b[i]), e * i);
+              edouble im = ldexp(imag(approx->u.e->b[i]), e * i);
+              a[i+o] = std::complex<long double>(to_ld(re), to_ld(im));
+            }
+            #pragma omp parallel for
+            for (int k = 0; k < count; ++k) {
+              ref->px[0][k].c += dc;
+              std::complex<long double> z(0), dz(a[o]), c(std::ldexp((long double)(to_ld(std::real(ref->px[0][k].c))), -e), std::ldexp((long double)(to_ld(std::imag(ref->px[0][k].c))), -e));
+              std::complex<long double> cn(c);
+              for (int i = 0; i < o; ++i) {
+                z += a[i] * cn;
+                dz += a[i+o+1] * cn;
+                cn *= c;
+              }
+              ref->px[0][k].z = z;
+              ref->px[0][k].dz = dz;
+            }
+            break;
+          }
+          case ft_edouble:
+          {
+            #pragma omp parallel for
+            for (int k = 0; k < count; ++k) {
+              ref->px[0][k].c += dc;
+              std::complex<edouble> z, dz, c(edouble(std::real(ref->px[0][k].c)), edouble(std::imag(ref->px[0][k].c)));
+              z2c_approx_do(approx, c, &z, &dz);
+              ref->px[0][k].z = to_C(z, R(0));
+              ref->px[0][k].dz = to_C(dz, R(0));
+            }
+            break;
+          }
+          default:
+          {
+            assert(! "float type valid");
+            break;
+          }
+        }
       }
 
       image_log(img, LOG_CACHE, "         APPROX         %8d\n", ref->iters);
