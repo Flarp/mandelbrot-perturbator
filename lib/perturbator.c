@@ -603,7 +603,7 @@ static void *image_worker(void *arg) {
         switch (img->ft) {
           case ft_double:
           {
-            long e = exponent;//(pixel_spacing);
+            long e = ::exponent(pixel_spacing);
             std::complex<double> *a = (std::complex<double> *) malloc((2 * o + 1) * sizeof(*a));
             for (int i = 0; i < o; ++i) {
               edouble re = ldexp(real(approx->u.e->a[i]), e * (i + 1));
@@ -632,7 +632,7 @@ static void *image_worker(void *arg) {
           }
           case ft_long_double:
           {
-            long e = exponent;//(pixel_spacing);
+            long e = ::exponent(pixel_spacing);
             std::complex<long double> *a = (std::complex<long double> *) malloc((2 * o + 1) * sizeof(*a));
             for (int i = 0; i < o; ++i) {
               edouble re = ldexp(real(approx->u.e->a[i]), e * (i + 1));
