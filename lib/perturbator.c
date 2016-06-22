@@ -628,6 +628,7 @@ static void *image_worker(void *arg) {
               ref->px[0][k].z = z;
               ref->px[0][k].dz = dz;
             }
+            free(a);
             break;
           }
           case ft_long_double:
@@ -657,6 +658,7 @@ static void *image_worker(void *arg) {
               ref->px[0][k].z = z;
               ref->px[0][k].dz = dz;
             }
+            free(a);
             break;
           }
           case ft_edouble:
