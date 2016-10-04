@@ -350,7 +350,7 @@ long exponent(double z)
 long exponent(long double z)
 {
   int e;
-  frexp(z, &e);
+  frexpl(z, &e);
   return e;
 }
 
