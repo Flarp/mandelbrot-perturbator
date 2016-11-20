@@ -1,6 +1,6 @@
 bin/perturbator-glfw3
-lib/generator
-lib/generated
+bin/perturbator-offline
 *.a
 *.o
-*.hi
+_
+
