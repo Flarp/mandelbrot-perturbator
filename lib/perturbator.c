@@ -396,6 +396,48 @@ void release_refs(struct perturbator *img) {
   img->refs = 0;
 }
 
+template<typename R>
+void rebase_to_new_reference(int count, pixel<R> *px, std::complex<R> dc) {
+  #pragma omp parallel for
+  for (int k = 0; k < count; ++k) {
+    px[k].c += dc;
+  }
+}
+
+float ldexp(float x, long e) { return std::ldexp(x, e); } // FIXME e range
+double ldexp(double x, long e) { return std::ldexp(x, e); } // FIXME e range
+long double ldexp(long double x, long e) { return std::ldexp(x, e); } // FIXME e range
+
+template<typename R>
+void initialize_from_series_approximation(int count, pixel<R> *px, std::complex<R> dc, const z2c_approx_t<edouble> *approx, long e) {
+  int o = approx->order;
+  std::complex<R> *a = (std::complex<R> *) malloc((2 * o + 1) * sizeof(*a));
+  for (int i = 0; i < o; ++i) {
+    edouble re = ldexp(real(approx->a[i]), e * (i + 1));
+    edouble im = ldexp(imag(approx->a[i]), e * (i + 1));
+    a[i] = std::complex<R>(to_R(re, R(0)), to_R(im, R(0)));
+  }
+  for (int i = 0; i <= o; ++i) {
+    edouble re = ldexp(real(approx->b[i]), e * i);
+    edouble im = ldexp(imag(approx->b[i]), e * i);
+    a[i+o] = std::complex<R>(to_R(re, R(0)), to_R(im, R(0)));
+  }
+  #pragma omp parallel for
+  for (int k = 0; k < count; ++k) {
+    px[k].c += dc;
+    std::complex<R> z(0), dz(a[o]), c(ldexp(std::real(px[k].c), -e), ldexp(std::imag(px[k].c), -e));
+    std::complex<R> cn(c);
+    for (int i = 0; i < o; ++i) {
+      z += a[i] * cn;
+      dz += a[i+o+1] * cn;
+      cn *= c;
+    }
+    px[k].z = z;
+    px[k].dz = dz;
+  }
+  free(a);
+}
+
 template <typename R>
 static void *image_worker(void *arg) {
   struct perturbator *img = (struct perturbator *) arg;
@@ -454,9 +496,7 @@ static void *image_worker(void *arg) {
       mpc_set_ui_ui(ref->z, 0, 0, MPC_RNDNN);
       // rebase pixels to new reference
       int count = ref->count;
-      for (int k = 0; k < count; ++k) {
-        ref->px[0][k].c += dc;
-      }
+      rebase_to_new_reference(count, &ref->px[0][0], dc);
 
     } else {
 
@@ -596,91 +636,7 @@ static void *image_worker(void *arg) {
 
       // rebase pixels to new reference with approximation
       int count = ref->count;
-      struct z2c_approx *approx = snode->approx;
-      // compile approx for speed boost
-      {
-        int o = approx->u.e->order;
-        switch (img->ft) {
-          case ft_double:
-          {
-            long e = ::exponent(pixel_spacing);
-            std::complex<double> *a = (std::complex<double> *) malloc((2 * o + 1) * sizeof(*a));
-            for (int i = 0; i < o; ++i) {
-              edouble re = ldexp(real(approx->u.e->a[i]), e * (i + 1));
-              edouble im = ldexp(imag(approx->u.e->a[i]), e * (i + 1));
-              a[i] = std::complex<double>(to_ld(re), to_ld(im));
-            }
-            for (int i = 0; i <= o; ++i) {
-              edouble re = ldexp(real(approx->u.e->b[i]), e * i);
-              edouble im = ldexp(imag(approx->u.e->b[i]), e * i);
-              a[i+o] = std::complex<double>(to_ld(re), to_ld(im));
-            }
-            #pragma omp parallel for
-            for (int k = 0; k < count; ++k) {
-              ref->px[0][k].c += dc;
-              std::complex<double> z(0), dz(a[o]), c(std::ldexp(double(to_ld(std::real(ref->px[0][k].c))), -e), std::ldexp(double(to_ld(std::imag(ref->px[0][k].c))), -e));
-              std::complex<double> cn(c);
-              for (int i = 0; i < o; ++i) {
-                z += a[i] * cn;
-                dz += a[i+o+1] * cn;
-                cn *= c;
-              }
-              ref->px[0][k].z = z;
-              ref->px[0][k].dz = dz;
-            }
-            free(a);
-            break;
-          }
-          case ft_long_double:
-          {
-            long e = ::exponent(pixel_spacing);
-            std::complex<long double> *a = (std::complex<long double> *) malloc((2 * o + 1) * sizeof(*a));
-            for (int i = 0; i < o; ++i) {
-              edouble re = ldexp(real(approx->u.e->a[i]), e * (i + 1));
-              edouble im = ldexp(imag(approx->u.e->a[i]), e * (i + 1));
-              a[i] = std::complex<long double>(to_ld(re), to_ld(im));
-            }
-            for (int i = 0; i <= o; ++i) {
-              edouble re = ldexp(real(approx->u.e->b[i]), e * i);
-              edouble im = ldexp(imag(approx->u.e->b[i]), e * i);
-              a[i+o] = std::complex<long double>(to_ld(re), to_ld(im));
-            }
-            #pragma omp parallel for
-            for (int k = 0; k < count; ++k) {
-              ref->px[0][k].c += dc;
-              std::complex<long double> z(0), dz(a[o]), c(std::ldexp((long double)(to_ld(std::real(ref->px[0][k].c))), -e), std::ldexp((long double)(to_ld(std::imag(ref->px[0][k].c))), -e));
-              std::complex<long double> cn(c);
-              for (int i = 0; i < o; ++i) {
-                z += a[i] * cn;
-                dz += a[i+o+1] * cn;
-                cn *= c;
-              }
-              ref->px[0][k].z = z;
-              ref->px[0][k].dz = dz;
-            }
-            free(a);
-            break;
-          }
-          case ft_edouble:
-          {
-            #pragma omp parallel for
-            for (int k = 0; k < count; ++k) {
-              ref->px[0][k].c += dc;
-              std::complex<edouble> z, dz, c(edouble(std::real(ref->px[0][k].c)), edouble(std::imag(ref->px[0][k].c)));
-              z2c_approx_do(approx, c, &z, &dz);
-              ref->px[0][k].z = to_C(z, R(0));
-              ref->px[0][k].dz = to_C(dz, R(0));
-            }
-            break;
-          }
-          default:
-          {
-            assert(! "float type valid");
-            break;
-          }
-        }
-      }
-
+      initialize_from_series_approximation(count, &ref->px[0][0], dc, snode->approx->u.e, ::exponent(pixel_spacing));
       image_log(img, LOG_CACHE, "         APPROX         %8d\n", ref->iters);
 
     } // if parent
