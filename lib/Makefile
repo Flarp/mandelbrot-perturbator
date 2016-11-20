@@ -6,7 +6,7 @@ libperturbator.a: perturbator.o
 	ar rcsv libperturbator.a perturbator.o
 
 perturbator.o: perturbator.c perturbator.h edouble.cc z2c.c
-	g++ -std=c++11 -pedantic -Wall -Wextra -fopenmp -O3 -march=native -c perturbator.c -I../../mandelbrot-numerics/c/include -I../../mandelbrot-numerics/c/lib -ggdb
+	g++ -std=c++11 -pedantic -Wall -Wextra -fopenmp -fPIC -O3 -march=native -c perturbator.c -I../../mandelbrot-numerics/c/include -I../../mandelbrot-numerics/c/lib -ggdb
 
 .PHONY: clean
 clean:
