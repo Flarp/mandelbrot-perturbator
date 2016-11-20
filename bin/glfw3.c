@@ -263,7 +263,7 @@ static void handle_view_morph(struct perturbator *context, state_t *state) {
     int e = mpfr_get_exp(r);
     mpfr_mul_2si(r, r, e / 2, MPFR_RNDN);
 */
-    int p = max(53, 53 - mpfr_get_exp(r));
+    int p = max(53, 53 - 2 * mpfr_get_exp(r));
     state->precision = p;
     mpfr_set_prec(state->centerx, p);
     mpfr_set_prec(state->centery, p);
