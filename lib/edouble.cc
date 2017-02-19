@@ -237,32 +237,7 @@ inline edouble operator-(const edouble &a) {
 }
 
 inline edouble operator-(const edouble &a, const edouble &b) {
-  if (a.x == 0.0) {
-    return -b;
-  }
-  if (b.x == 0.0) {
-    return a;
-  }
-  long e(std::max(a.e, b.e));
-  long da(a.e - e);
-  long db(b.e - e);
-  int ia(da);
-  int ib(db);
-  if (long(ia) != da) {
-    // a -> 0
-    return -b;
-  }
-  if (long(ib) != db) {
-    // b -> 0
-    return a;
-  }
-#ifdef EDOUBLE_USE_LDEXP
-  return edouble(std::ldexp(a.x, ia) - std::ldexp(b.x, ib), e);
-#else
-  double sa = edouble::scaling[std::max(da + 128, 0L)];
-  double sb = edouble::scaling[std::max(db + 128, 0L)];
-  return edouble(a.x * sa - b.x * sb, e);
-#endif
+  return a + (-b);
 }
 
 inline edouble operator*(const edouble &a, const edouble &b) {
