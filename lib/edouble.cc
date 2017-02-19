@@ -14,6 +14,9 @@
 
 // ldexp is ~2x slower than scaling via table of powers of two
 //#define EDOUBLE_USE_LDEXP
+// union hacking is 10% faster than scaling via table
+#define EDOUBLE_USE_UNION
+union idouble { double d; long i; };
 
 inline double sign(double x) {
   return (x > 0) - (x < 0);
@@ -36,9 +39,17 @@ public:
       x = x0;
       e = 0;
     } else {
+#ifdef EDOUBLE_USE_UNION
+      idouble f;
+      f.d = x0;
+      long e1(((f.i & 0x7FF0000000000000LL)>>52) - 1022LL);
+      f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | 0x3FE0000000000000LL;
+      double x1(f.d);
+#else
       int tmp(0);
       double x1(std::frexp(x0, &tmp));
       long e1(tmp);
+#endif
       e1 += e0;
       if (e0 > supexponent || e1 > maxexponent) {
         x = sign(x0) / 0.0;
@@ -169,9 +180,29 @@ inline int compare(const edouble &a, const edouble &b) {
 #ifdef EDOUBLE_USE_LDEXP
   return compare(std::ldexp(a.x, ia), std::ldexp(b.x, ib));
 #else
+#ifdef EDOUBLE_USE_UNION
+  double ax = a.x;
+  if (0 >= da && da > -1000)
+  {
+    idouble f;
+    f.d = ax;
+    f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + da) << 52);
+    ax = f.d;
+  }
+  double bx = b.x;
+  if (0 >= db && db > -1000)
+  {
+    idouble f;
+    f.d = bx;
+    f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + db) << 52);
+    bx = f.d;
+  }
+  return compare(ax, bx);
+#else
   double sa = edouble::scaling[std::max(da + 128, 0L)];
   double sb = edouble::scaling[std::max(db + 128, 0L)];
   return compare(a.x * sa, b.x * sb);
+#endif
 #endif
 }
 
@@ -226,9 +257,29 @@ inline edouble operator+(const edouble &a, const edouble &b) {
 #ifdef EDOUBLE_USE_LDEXP
   return edouble(std::ldexp(a.x, ia) + std::ldexp(b.x, ib), e);
 #else
+#ifdef EDOUBLE_USE_UNION
+  double ax = a.x;
+  if (0 >= da && da > -1000)
+  {
+    idouble f;
+    f.d = ax;
+    f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + da) << 52);
+    ax = f.d;
+  }
+  double bx = b.x;
+  if (0 >= db && db > -1000)
+  {
+    idouble f;
+    f.d = bx;
+    f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + db) << 52);
+    bx = f.d;
+  }
+  return edouble(ax + bx, e);
+#else
   double sa = edouble::scaling[std::max(da + 128, 0L)];
   double sb = edouble::scaling[std::max(db + 128, 0L)];
   return edouble(a.x * sa + b.x * sb, e);
+#endif
 #endif
 }
 
