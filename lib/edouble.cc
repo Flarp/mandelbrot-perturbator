@@ -18,6 +18,13 @@
 #define EDOUBLE_USE_UNION
 union idouble { double d; long i; };
 
+// not checking for 0 or inf or nan or overflow or underflow is ~35% faster...
+// but it's unsafe so disable it for forseeable future
+//#define EDOUBLE_UNSAFE
+
+// annotating branch prediction makes addition ~10% faster
+#define unlikely(x) __builtin_expect(x,false)
+
 inline double sign(double x) {
   return (x > 0) - (x < 0);
 }
@@ -35,10 +42,12 @@ public:
   inline edouble() : x(0), e(0) { };
   inline edouble(const edouble &that) : x(that.x), e(that.e) { };
   inline edouble(const double &x0, const long &e0) {
-    if (x0 == 0 || std::isnan(x0) || std::isinf(x0)) {
+#ifndef EDOUBLE_UNSAFE
+    if (unlikely(x0 == 0 || std::isnan(x0) || std::isinf(x0))) {
       x = x0;
       e = 0;
     } else {
+#endif
 #ifdef EDOUBLE_USE_UNION
       idouble f;
       f.d = x0;
@@ -51,20 +60,24 @@ public:
       long e1(tmp);
 #endif
       e1 += e0;
-      if (e0 > supexponent || e1 > maxexponent) {
+#ifndef EDOUBLE_UNSAFE
+      if (unlikely(e0 > supexponent || e1 > maxexponent)) {
         x = sign(x0) / 0.0;
         e = 0;
-      } else if (e0 < infexponent || e1 < minexponent) {
+      } else if (unlikely(e0 < infexponent || e1 < minexponent)) {
         x = sign(x0) * 0.0;
         e = 0;
       } else {
+#endif
         x = x1;
         e = e1;
+#ifndef EDOUBLE_UNSAFE
       }
     }
+#endif
   };
   inline edouble(const long double &x0, const long &e0) {
-    if (x0 == 0 || std::isnan(x0) || std::isinf(x0)) {
+    if (unlikely(x0 == 0 || std::isnan(x0) || std::isinf(x0))) {
       x = x0;
       e = 0;
     } else {
@@ -72,10 +85,10 @@ public:
       long double x1(frexp(x0, &tmp));
       long e1(tmp);
       e1 += e0;
-      if (e0 > supexponent || e1 > maxexponent) {
+      if (unlikely(e0 > supexponent || e1 > maxexponent)) {
         x = sign(x0) / 0.0;
         e = 0;
-      } else if (e0 < infexponent || e1 < minexponent) {
+      } else if (unlikely(e0 < infexponent || e1 < minexponent)) {
         x = sign(x0) * 0.0;
         e = 0;
       } else {
@@ -100,10 +113,10 @@ public:
   };
   inline long double to_ld() {
     int tmp(e);
-    if (e > long(tmp)) {
+    if (unlikely(e > long(tmp))) {
       return sign(x) / 0.0;
     }
-    if (e < long(tmp)) {
+    if (unlikely(e < long(tmp))) {
       return sign(x) * 0.0;
     }
     return std::ldexp((long double) x, tmp);
@@ -158,44 +171,56 @@ inline int compare(const double &a, const double &b) {
 }
 
 inline int compare(const edouble &a, const edouble &b) {
-  if (a.x == 0.0) {
+  if (unlikely(a.x == 0.0)) {
     return -sign(b.x);
   }
-  if (b.x == 0.0) {
+  if (unlikely(b.x == 0.0)) {
     return sign(a.x);
   }
   long e(std::max(a.e, b.e));
   long da(a.e - e);
   long db(b.e - e);
+#ifndef EDOUBLE_UNSAFE
   int ia(da);
   int ib(db);
-  if (long(ia) != da) {
+  if (unlikely(long(ia) != da)) {
     // a -> 0
     return -sign(b.x);
   }
-  if (long(ib) != db) {
+  if (unlikely(long(ib) != db)) {
     // b -> 0
     return sign(a.x);
   }
+#endif
 #ifdef EDOUBLE_USE_LDEXP
   return compare(std::ldexp(a.x, ia), std::ldexp(b.x, ib));
 #else
 #ifdef EDOUBLE_USE_UNION
   double ax = a.x;
-  if (0 >= da && da > -1000)
+  if (0 > da)
   {
-    idouble f;
-    f.d = ax;
-    f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + da) << 52);
-    ax = f.d;
+    if (da > -1000)
+    {
+      idouble f;
+      f.d = ax;
+      f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + da) << 52);
+      ax = f.d;
+    }
+    else
+      ax = 0.0;
   }
   double bx = b.x;
-  if (0 >= db && db > -1000)
+  if (0 > db)
   {
-    idouble f;
-    f.d = bx;
-    f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + db) << 52);
-    bx = f.d;
+    if (db > -1000)
+    {
+      idouble f;
+      f.d = bx;
+      f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + db) << 52);
+      bx = f.d;
+    }
+    else
+      bx = 0.0;
   }
   return compare(ax, bx);
 #else
@@ -235,44 +260,56 @@ inline edouble sqrt(const edouble &a) {
 }
 
 inline edouble operator+(const edouble &a, const edouble &b) {
-  if (a.x == 0.0) {
+  if (unlikely(a.x == 0.0)) {
     return b;
   }
-  if (b.x == 0.0) {
+  if (unlikely(b.x == 0.0)) {
     return a;
   }
   long e(std::max(a.e, b.e));
   long da(a.e - e);
   long db(b.e - e);
+#ifndef EDOUBLE_UNSAFE
   int ia(da);
   int ib(db);
-  if (long(ia) != da) {
+  if (unlikely(long(ia) != da)) {
     // a -> 0
     return b;
   }
-  if (long(ib) != db) {
+  if (unlikely(long(ib) != db)) {
     // b -> 0
     return a;
   }
+#endif
 #ifdef EDOUBLE_USE_LDEXP
   return edouble(std::ldexp(a.x, ia) + std::ldexp(b.x, ib), e);
 #else
 #ifdef EDOUBLE_USE_UNION
   double ax = a.x;
-  if (0 >= da && da > -1000)
+  if (0 > da)
   {
-    idouble f;
-    f.d = ax;
-    f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + da) << 52);
-    ax = f.d;
+    if (da > -1000)
+    {
+      idouble f;
+      f.d = ax;
+      f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + da) << 52);
+      ax = f.d;
+    }
+    else
+      ax = 0.0;
   }
   double bx = b.x;
-  if (0 >= db && db > -1000)
+  if (0 > db)
   {
-    idouble f;
-    f.d = bx;
-    f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + db) << 52);
-    bx = f.d;
+    if (db > -1000)
+    {
+      idouble f;
+      f.d = bx;
+      f.i = (f.i & 0x800FFFFFFFFFFFFFLL) | ((1022LL + db) << 52);
+      bx = f.d;
+    }
+    else
+      bx = 0.0;
   }
   return edouble(ax + bx, e);
 #else
