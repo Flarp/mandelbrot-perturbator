@@ -43,8 +43,8 @@ public:
   inline edouble(const edouble &that) : x(that.x), e(that.e) { };
   inline edouble(const double &x0, const long &e0) {
 #ifndef EDOUBLE_UNSAFE
-    if (unlikely(x0 == 0 || std::isnan(x0) || std::isinf(x0))) {
-      x = x0;
+    if (unlikely(! std::isnormal(x0))) {
+      x = (std::isnan(x0) || std::isinf(x0)) ? x0 : 0.0; // squash subnormals
       e = 0;
     } else {
 #endif
@@ -62,10 +62,10 @@ public:
       e1 += e0;
 #ifndef EDOUBLE_UNSAFE
       if (unlikely(e0 > supexponent || e1 > maxexponent)) {
-        x = sign(x0) / 0.0;
+        x = sign(x0) / 0.0; // infinity with sign
         e = 0;
       } else if (unlikely(e0 < infexponent || e1 < minexponent)) {
-        x = sign(x0) * 0.0;
+        x = sign(x0) * 0.0; // 0 with sign
         e = 0;
       } else {
 #endif
@@ -77,8 +77,8 @@ public:
 #endif
   };
   inline edouble(const long double &x0, const long &e0) {
-    if (unlikely(x0 == 0 || std::isnan(x0) || std::isinf(x0))) {
-      x = x0;
+    if (unlikely(! std::isnormal(x0))) {
+      x = (std::isnan(x0) || std::isinf(x0)) ? x0 : 0.0; // squash subnormals
       e = 0;
     } else {
       int tmp(0);
@@ -171,12 +171,14 @@ inline int compare(const double &a, const double &b) {
 }
 
 inline int compare(const edouble &a, const edouble &b) {
+#ifndef EDOUBLE_UNSAFE
   if (unlikely(a.x == 0.0)) {
     return -sign(b.x);
   }
   if (unlikely(b.x == 0.0)) {
     return sign(a.x);
   }
+#endif
   long e(std::max(a.e, b.e));
   long da(a.e - e);
   long db(b.e - e);
@@ -260,12 +262,14 @@ inline edouble sqrt(const edouble &a) {
 }
 
 inline edouble operator+(const edouble &a, const edouble &b) {
+#ifndef EDOUBLE_UNSAFE
   if (unlikely(a.x == 0.0)) {
     return b;
   }
   if (unlikely(b.x == 0.0)) {
     return a;
   }
+#endif
   long e(std::max(a.e, b.e));
   long da(a.e - e);
   long db(b.e - e);
