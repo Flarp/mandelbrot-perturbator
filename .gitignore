@@ -1,5 +1,6 @@
 bin/perturbator-glfw3
 bin/perturbator-offline
+lib/edouble
 *.a
 *.o
 _
