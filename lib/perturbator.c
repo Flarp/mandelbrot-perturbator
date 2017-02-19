@@ -857,10 +857,22 @@ extern void perturbator_start(struct perturbator *img, const mpfr_t centerx, con
     e >= EXP_THRESHOLD_LONG_DOUBLE ? ft_long_double :
     ft_edouble;
   switch (img->ft) {
-    case ft_float:        perturbator_start_internal<float>(img); return;
-    case ft_double:       perturbator_start_internal<double>(img); return;
-    case ft_long_double:  perturbator_start_internal<long double>(img); return;
-    case ft_edouble:      perturbator_start_internal<edouble>(img); return;
+    case ft_float:
+      image_log(img, LOG_VIEW, "         TYPE      f24e8           float\n");
+      perturbator_start_internal<float>(img);
+      return;
+    case ft_double:
+      image_log(img, LOG_VIEW, "         TYPE     f53e11          double\n");
+      perturbator_start_internal<double>(img);
+      return;
+    case ft_long_double:
+      image_log(img, LOG_VIEW, "         TYPE     f64e15     long double\n");
+      perturbator_start_internal<long double>(img);
+      return;
+    case ft_edouble:
+      image_log(img, LOG_VIEW, "         TYPE     f53e64         edouble\n");
+      perturbator_start_internal<edouble>(img);
+      return;
   }
   assert(! "valid float type");
 }
