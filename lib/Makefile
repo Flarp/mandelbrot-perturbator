@@ -8,6 +8,9 @@ libperturbator.a: perturbator.o
 perturbator.o: perturbator.c perturbator.h edouble.cc z2c.c
 	g++ -std=c++11 -pedantic -Wall -Wextra -fopenmp -fPIC -O3 -march=native -c perturbator.c -I../../mandelbrot-numerics/c/include -I../../mandelbrot-numerics/c/lib -ggdb
 
+edouble: edouble.cc
+	g++ -std=c++11 -pedantic -Wall -Wextra -fopenmp -fPIC -O3 -march=native -o edouble -DEDOUBLE_STANDALONE edouble.cc -ggdb
+
 .PHONY: clean
 clean:
 	-rm -r libperturbator.a perturbator.o
