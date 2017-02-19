@@ -685,7 +685,7 @@ static void *image_worker(void *arg) {
           for (int i = 1; i <= chunk; ++i) {
 
             dz = R(2.0) * rz * dz + R(1.0);
-            z = R(2.0) * z_d[i-1] * z + z * z + c;
+            z = (R(2.0) * z_d[i-1] + z) * z + c;
             rz = z_d[i] + z;
             R rz2 = std::norm(rz);
 
