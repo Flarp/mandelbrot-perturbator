@@ -5,11 +5,11 @@
 libperturbator.a: perturbator.o
 	ar rcsv libperturbator.a perturbator.o
 
-perturbator.o: perturbator.c perturbator.h edouble.cc z2c.c
-	g++ -std=c++11 -pedantic -Wall -Wextra -fopenmp -fPIC -O3 -march=native -c perturbator.c -I../../mandelbrot-numerics/c/include -I../../mandelbrot-numerics/c/lib -ggdb
+perturbator.o: perturbator.cpp perturbator.h edouble.cc z2c.c
+	em++ -std=c++14 -pedantic -Wall -Wextra -fopenmp -fPIC -O3 -march=native -c perturbator.cpp -I../../mandelbrot-numerics/c/include -I../../mandelbrot-numerics/c/lib -I/usr/local/include
 
 edouble: edouble.cc
-	g++ -std=c++11 -pedantic -Wall -Wextra -fopenmp -fPIC -O3 -march=native -o edouble -DEDOUBLE_STANDALONE edouble.cc -ggdb
+	em++ -std=c++14 -pedantic -Wall -Wextra -fopenmp -fPIC -O3 -march=native -o edouble -DEDOUBLE_STANDALONE edouble.cc -I/usr/local/include
 
 .PHONY: clean
 clean:
